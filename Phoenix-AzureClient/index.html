@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phoenix-Azure</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .navbar {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">Phoenix-Azure</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.html">Patients</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="repository-explorer.html">Repository Explorer</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div id="alertContainer"></div>
+        
+        <!-- Patient List View -->
+        <div id="patientListView">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>Patient List</h1>
+                <div class="input-group" style="max-width: 300px;">
+                    <input type="text" class="form-control" placeholder="Search patients..." id="searchInput">
+                    <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">Clear</button>
+                </div>
+            </div>
+
+            <div id="loadingPatients" class="text-center my-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading patient data...</p>
+            </div>
+
+            <div id="noPatients" class="alert alert-info my-4" style="display: none;">
+                <h4 class="alert-heading">No patients found</h4>
+                <p>There are no patients in the system or the connection to the API failed.</p>
+            </div>
+
+            <div class="table-responsive" id="patientTableContainer" style="display: none;">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th data-sort="patientID">ID <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                            <th data-sort="last">Name <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                            <th data-sort="birthDate">DOB <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                            <th data-sort="gender">Gender <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                            <th>Contact</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="patientTableBody">
+                        <!-- Patient rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Patient Detail View -->
+        <div id="patientDetailView" style="display: none;">
+            <div class="mb-3">
+                <button class="btn btn-secondary" id="backToListBtn">
+                    <i class="bi bi-arrow-left"></i> Back to Patient List
+                </button>
+            </div>
+
+            <div id="loadingPatientDetail" class="text-center my-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading patient data...</p>
+            </div>
+
+            <div id="patientNotFound" class="alert alert-warning my-4" style="display: none;">
+                <h4 class="alert-heading">Patient Not Found</h4>
+                <p>The requested patient could not be found.</p>
+            </div>
+
+            <div id="patientDetailContainer" style="display: none;">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h3 class="mb-0">Patient Information</h3>
+                        <span id="patientStatus" class="badge bg-success">Active</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4>Demographics</h4>
+                                <dl class="row">
+                                    <dt class="col-sm-4">Patient ID</dt>
+                                    <dd class="col-sm-8" id="patientID"></dd>
+                                    
+                                    <dt class="col-sm-4">Chart ID</dt>
+                                    <dd class="col-sm-8" id="chartID"></dd>
+                                    
+                                    <dt class="col-sm-4">Full Name</dt>
+                                    <dd class="col-sm-8" id="fullName"></dd>
+                                    
+                                    <dt class="col-sm-4">First Name</dt>
+                                    <dd class="col-sm-8" id="firstName"></dd>
+                                    
+                                    <dt class="col-sm-4">Middle Name</dt>
+                                    <dd class="col-sm-8" id="middleName"></dd>
+                                    
+                                    <dt class="col-sm-4">Last Name</dt>
+                                    <dd class="col-sm-8" id="lastName"></dd>
+                                    
+                                    <dt class="col-sm-4">Suffix</dt>
+                                    <dd class="col-sm-8" id="suffix"></dd>
+                                    
+                                    <dt class="col-sm-4">Salutation</dt>
+                                    <dd class="col-sm-8" id="salutation"></dd>
+                                    
+                                    <dt class="col-sm-4">Gender</dt>
+                                    <dd class="col-sm-8" id="gender"></dd>
+                                    
+                                    <dt class="col-sm-4">Date of Birth</dt>
+                                    <dd class="col-sm-8" id="birthDate"></dd>
+                                    
+                                    <dt class="col-sm-4">SSN</dt>
+                                    <dd class="col-sm-8" id="ssn"></dd>
+                                </dl>
+                            </div>
+                            <div class="col-md-6">
+                                <h4>Contact Information</h4>
+                                <dl class="row">
+                                    <dt class="col-sm-4">Address</dt>
+                                    <dd class="col-sm-8" id="patientAddress"></dd>
+                                    
+                                    <dt class="col-sm-4">City</dt>
+                                    <dd class="col-sm-8" id="city"></dd>
+                                    
+                                    <dt class="col-sm-4">State</dt>
+                                    <dd class="col-sm-8" id="state"></dd>
+                                    
+                                    <dt class="col-sm-4">ZIP</dt>
+                                    <dd class="col-sm-8" id="zip"></dd>
+                                    
+                                    <dt class="col-sm-4">Phone</dt>
+                                    <dd class="col-sm-8" id="phone"></dd>
+                                    
+                                    <dt class="col-sm-4">Email</dt>
+                                    <dd class="col-sm-8" id="email"></dd>
+                                    
+                                    <dt class="col-sm-4">Last Visit</dt>
+                                    <dd class="col-sm-8" id="lastVisit"></dd>
+                                    
+                                    <dt class="col-sm-4">Primary Care Provider</dt>
+                                    <dd class="col-sm-8" id="primaryCareProvider"></dd>
+                                    
+                                    <dt class="col-sm-4">Status</dt>
+                                    <dd class="col-sm-8" id="activeStatus"></dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="mb-0">Medical Records</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="loadingMedicalRecords" class="text-center my-3">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading medical records...</p>
+                        </div>
+
+                        <div id="noMedicalRecords" class="alert alert-info" style="display: none;">
+                            No medical records found for this patient.
+                        </div>
+
+                        <div id="medicalRecordsContainer" style="display: none;">
+                            <div class="accordion" id="medicalRecordsAccordion">
+                                <!-- Medical records will be inserted here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
