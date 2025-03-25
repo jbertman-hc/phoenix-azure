@@ -21,6 +21,47 @@ Phoenix-Azure is a comprehensive healthcare application that connects to a remot
 - Execute repository methods with parameters and view results
 - Gain visibility into the data model and capabilities of the system
 
+### Comprehensive Patient View
+- Access complete patient information aggregated from multiple repositories
+- View data in a structured, tabular format
+- Explore the repository map to understand data sources
+
+## Current Status
+- **Index Page**: Fully functional with working search functionality that filters in real-time
+- **Repository Explorer**: UI is complete, but backend integration is still in progress
+- **Comprehensive Patient View**: UI is complete with consistent styling, but data aggregation is still in development
+
+## Quick Start Guide
+
+### Prerequisites
+- .NET 9.0 SDK or later
+- Modern web browser (Chrome, Firefox, Edge, etc.)
+- Python 3.x (for running the client server)
+
+### Running the Application
+
+#### Step 1: Start the API Server
+```bash
+cd Phoenix-AzureAPI
+dotnet run
+```
+The API will be available at http://localhost:5300
+
+#### Step 2: Start the Client Server
+```bash
+cd Phoenix-AzureClient
+python -m http.server 8081
+```
+The client will be available at http://localhost:8081
+
+#### Step 3: Access the Application
+Open your browser and navigate to http://localhost:8081
+
+### Testing the Application
+1. **Patient List**: On the index page, use the search box to filter patients in real-time
+2. **Repository Explorer**: Navigate to the Repository Explorer page to view available repositories
+3. **Comprehensive Patient View**: Enter a patient ID (e.g., 1036) to view aggregated patient data
+
 ## Architecture
 The application follows a three-tier architecture:
 - **Presentation Layer**: HTML/JavaScript client and API controllers
@@ -31,28 +72,6 @@ The architecture implements a flexible data source strategy that allows switchin
 - Repository interfaces define common data access methods
 - Concrete implementations handle specific data source interactions
 - A factory pattern creates the appropriate repository based on configuration
-
-## Getting Started
-
-### Prerequisites
-- .NET 9.0 SDK or later
-- Modern web browser (Chrome, Firefox, Edge, etc.)
-- Access to the remote API at `apiserviceswin20250318.azurewebsites.net/api/`
-
-### Running the Application
-1. Start the API server:
-   ```
-   cd Phoenix-AzureAPI
-   dotnet run
-   ```
-   The API will be available at http://localhost:5300
-
-2. Start the client server:
-   ```
-   cd Phoenix-AzureClient
-   python -m http.server 8080
-   ```
-   The client will be available at http://localhost:8080
 
 ## API Endpoints
 
@@ -66,6 +85,10 @@ The architecture implements a flexible data source strategy that allows switchin
 - `GET /api/RepositoryExplorer/explore/{repositoryName}`: Explore a specific repository
 - `GET /api/RepositoryExplorer/explore/{repositoryName}/{methodName}`: Execute a method on a repository
 
+### Patient Data Controller
+- `GET /api/PatientData/comprehensive/{patientId}`: Get comprehensive patient data from all repositories
+- `GET /api/PatientData/repositories-map`: Get a map of all repositories needed for patient data
+
 ## Data Sources
 The application can connect to different data sources:
 - **Remote API**: Connects to `apiserviceswin20250318.azurewebsites.net/api/` for patient data
@@ -78,95 +101,13 @@ The application can connect to different data sources:
 - Repository pattern is used for data access abstraction
 - CORS is configured to allow cross-origin requests between client and API
 
+## Troubleshooting
+- If you encounter CORS issues, ensure the API server is running and has CORS properly configured
+- If patient data doesn't load, check the API connection in the browser console
+- If the client server fails to start, ensure port 8081 is not in use by another application
+
 ## Future Enhancements
 - Authentication and authorization
 - Patient data editing capabilities
 - Advanced filtering and reporting
 - Integration with additional healthcare systems
-
-# Phoenix-Azure
-
-A modern healthcare application that demonstrates integration between a .NET Core API and a JavaScript client, showcasing repository pattern implementation and flexible data source strategy.
-
-## Project Overview
-
-Phoenix-Azure is a healthcare application that implements a three-tier architecture:
-
-1. **Presentation Layer**: JavaScript client with HTML/CSS frontend
-2. **Business Logic Layer**: .NET Core API service (port 5300)
-3. **Data Access Layer**: Abstracted repositories that can connect to either SQL or FHIR data sources
-
-The application provides a Repository Explorer that allows users to browse and interact with various repositories in the system.
-
-## Key Features
-
-- **Repository Explorer**: Browse and interact with all available repositories
-- **Flexible Data Source Strategy**: Switch between SQL and FHIR data sources
-- **Patient Portal**: Access patient data from remote API endpoints
-- **Modern UI**: Clean, responsive interface built with Bootstrap
-
-## Architecture
-
-The Phoenix project implements a flexible data source strategy that allows switching between SQL and FHIR data sources:
-
-1. Repository interfaces define common data access methods
-2. Concrete implementations (SqlPatientRepository and FhirPatientRepository) handle specific data source interactions
-3. A factory pattern (RepositoryFactory) creates the appropriate repository based on configuration
-4. Environment variables control which data source is used (DataSourceSettings__Source)
-
-## Project Structure
-
-- **Phoenix-AzureAPI/**: .NET Core API service
-  - **Controllers/**: API endpoints for repository exploration and patient data
-  - **Models/**: Data models for patients and repositories
-  - **Services/**: Business logic services
-  
-- **Phoenix-AzureClient/**: JavaScript client application
-  - HTML/CSS/JavaScript frontend
-  - Repository explorer interface
-  - Patient data visualization
-
-## Getting Started
-
-### Prerequisites
-
-- .NET Core SDK 9.0 or later
-- Node.js (for development tools)
-- Web browser
-
-### Running the Application
-
-1. Start the API server:
-   ```
-   cd Phoenix-AzureAPI
-   dotnet run
-   ```
-
-2. Start the client (using a simple HTTP server):
-   ```
-   cd Phoenix-AzureClient
-   python3 -m http.server 8080
-   ```
-
-3. Open your browser and navigate to:
-   ```
-   http://localhost:8080
-   ```
-
-## API Endpoints
-
-- `GET /api/RepositoryExplorer/available`: Get all available repositories
-- `GET /api/RepositoryExplorer/{repositoryName}`: Get details for a specific repository
-- `GET /api/RepositoryExplorer/{repositoryName}/methods`: Get methods for a specific repository
-- `GET /api/RepositoryExplorer/explore/{repositoryName}/{methodName}`: Execute a method on a repository
-
-## Configuration
-
-The API service can be configured to use different data sources:
-
-- Set `DataSourceSettings__Source` to `"SQL"` or `"FHIR"` to switch between data sources
-- The FHIR server URL is configured to `http://phoenix-fhir:8080/fhir` by default
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

@@ -27,25 +27,47 @@ const patientsLink = document.getElementById('patientsLink');
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM content loaded, initializing application');
     loadPatients();
     
-    backToListBtn.addEventListener('click', () => {
-        showPatientList();
-    });
+    // Make sure all DOM elements are properly initialized
+    if (backToListBtn) {
+        backToListBtn.addEventListener('click', () => {
+            showPatientList();
+        });
+    } else {
+        console.error('Back to list button not found');
+    }
     
-    patientsLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        showPatientList();
-    });
+    if (patientsLink) {
+        patientsLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            showPatientList();
+        });
+    } else {
+        console.error('Patients link not found');
+    }
     
-    searchInput.addEventListener('input', () => {
-        filterPatients();
-    });
+    if (searchInput) {
+        console.log('Adding event listener to search input');
+        searchInput.addEventListener('input', debounce(() => {
+            console.log('Search input changed:', searchInput.value);
+            filterPatients();
+        }, 500));
+    } else {
+        console.error('Search input not found');
+    }
     
-    clearSearchBtn.addEventListener('click', () => {
-        searchInput.value = '';
-        filterPatients();
-    });
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', () => {
+            if (searchInput) {
+                searchInput.value = '';
+                filterPatients();
+            }
+        });
+    } else {
+        console.error('Clear search button not found');
+    }
     
     // Add event listeners for table sorting
     document.querySelectorAll('th[data-sort]').forEach(header => {
@@ -63,6 +85,8 @@ async function loadPatients() {
         showPatientTableContainer(false);
         showNoPatients(false);
         
+        console.log('Fetching patients from:', `${API_BASE_URL}/Patient`);
+        
         const response = await fetch(`${API_BASE_URL}/Patient`, {
             method: 'GET',
             headers: {
@@ -71,18 +95,30 @@ async function loadPatients() {
             mode: 'cors'
         });
         
+        console.log('API response status:', response.status);
+        
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
         }
         
-        patients = await response.json();
-        console.log('Patients loaded:', patients);
+        const responseText = await response.text();
+        console.log('Raw API response:', responseText);
         
-        if (patients.length === 0) {
-            showNoPatients(true);
-        } else {
-            renderPatientTable(patients);
-            showPatientTableContainer(true);
+        try {
+            patients = JSON.parse(responseText);
+            console.log('Patients loaded:', patients);
+            
+            if (patients.length === 0) {
+                console.log('No patients returned from API');
+                showNoPatients(true);
+            } else {
+                console.log(`Loaded ${patients.length} patients`);
+                renderPatientTable(patients);
+                showPatientTableContainer(true);
+            }
+        } catch (jsonError) {
+            console.error('Error parsing JSON:', jsonError);
+            throw new Error('Invalid JSON response from API');
         }
     } catch (error) {
         console.error('Error loading patients:', error);
@@ -277,26 +313,46 @@ function renderPatientTable(patients) {
 }
 
 function filterPatients() {
+    if (!searchInput) {
+        console.error('Search input element not found');
+        return;
+    }
+    
     const searchTerm = searchInput.value.toLowerCase().trim();
+    console.log('Filtering patients with search term:', searchTerm);
+    console.log('Number of patients before filtering:', patients.length);
     
     if (!searchTerm) {
+        console.log('Empty search term, showing all patients');
         renderPatientTable(patients);
         return;
     }
     
     const filtered = patients.filter(patient => {
-        const fullName = formatPatientName(patient).toLowerCase();
-        const patientId = patient.patientID.toString();
+        // Handle null values safely
+        const first = (patient.first || '').toLowerCase();
+        const last = (patient.last || '').toLowerCase();
+        const fullName = `${last}, ${first}`.toLowerCase();
+        const patientId = patient.patientID ? patient.patientID.toString() : '';
         const phone = (patient.phone || '').toLowerCase();
         const email = (patient.email || '').toLowerCase();
         
-        return fullName.includes(searchTerm) || 
-               patientId.includes(searchTerm) || 
-               phone.includes(searchTerm) || 
-               email.includes(searchTerm);
+        const matches = 
+            fullName.includes(searchTerm) || 
+            first.includes(searchTerm) ||
+            last.includes(searchTerm) ||
+            patientId.includes(searchTerm) || 
+            phone.includes(searchTerm) || 
+            email.includes(searchTerm);
+        
+        if (matches) {
+            console.log(`Patient ${patientId} (${fullName}) matches search term`);
+        }
+        
+        return matches;
     });
     
-    renderPatientTable(filtered);
+    console.log('Number of patients after filtering:', filtered.length);
     
     if (filtered.length === 0) {
         patientTableBody.innerHTML = `
@@ -304,6 +360,10 @@ function filterPatients() {
                 <td colspan="6" class="text-center">No patients match your search criteria</td>
             </tr>
         `;
+        console.log('No matching patients found');
+    } else {
+        renderPatientTable(filtered);
+        console.log(`Displaying ${filtered.length} matching patients`);
     }
 }
 
@@ -471,4 +531,16 @@ function showMedicalRecordsContainer(show) {
 
 function showNoMedicalRecords(show) {
     noMedicalRecords.style.display = show ? 'block' : 'none';
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function() {
+        const context = this;
+        const args = arguments;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+            func.apply(context, args);
+        }, wait);
+    };
 }

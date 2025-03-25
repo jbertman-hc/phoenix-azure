@@ -1,4 +1,5 @@
 using Microsoft.OpenApi.Models;
+using Phoenix_AzureAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,9 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Phoenix-Azure API", Version = "v1" });
 });
+
+// Register application services
+builder.Services.AddScoped<PatientDataService>();
 
 // Add CORS policy
 builder.Services.AddCors(options =>
