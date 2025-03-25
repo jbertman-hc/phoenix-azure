@@ -26,6 +26,10 @@ Phoenix-Azure is a comprehensive healthcare application that connects to a remot
 - View data in a structured, tabular format
 - Explore the repository map to understand data sources
 
+## Data Sources
+
+**IMPORTANT NOTE**: Currently, only the front index patient list retrieves real data from the Azure API. All other features (Repository Explorer, comprehensive patient view, medical records, etc.) use mock data due to CORS limitations with the Azure API. This is a temporary solution until the CORS issues are resolved.
+
 ## Current Status
 - **Index Page**: Fully functional with working search functionality that filters in real-time
 - **Repository Explorer**: UI is complete, but backend integration is still in progress
@@ -88,12 +92,6 @@ The architecture implements a flexible data source strategy that allows switchin
 ### Patient Data Controller
 - `GET /api/PatientData/comprehensive/{patientId}`: Get comprehensive patient data from all repositories
 - `GET /api/PatientData/repositories-map`: Get a map of all repositories needed for patient data
-
-## Data Sources
-The application can connect to different data sources:
-- **Remote API**: Connects to `apiserviceswin20250318.azurewebsites.net/api/` for patient data
-- **SQL Database**: Uses repository implementations in the DataAccess layer
-- **FHIR Server**: Can connect to FHIR endpoints for standardized healthcare data
 
 ## Development
 - The API uses ASP.NET Core with .NET 9.0

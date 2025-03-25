@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Net.Http;
+using System.Net;
 
 namespace Phoenix_AzureAPI.Services
 {
@@ -14,7 +16,7 @@ namespace Phoenix_AzureAPI.Services
     public class PatientDataService
     {
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly string _apiBaseUrl = "http://localhost:5300/api";
+        private readonly string _apiBaseUrl = "https://apiserviceswin20250318.azurewebsites.net/api";
 
         public PatientDataService(IHttpClientFactory httpClientFactory)
         {
@@ -28,6 +30,13 @@ namespace Phoenix_AzureAPI.Services
         /// <returns>A comprehensive patient data object</returns>
         public async Task<object> GetComprehensivePatientData(int patientId)
         {
+            // First validate that the patient exists
+            var patientExists = await ValidatePatientExists(patientId);
+            if (!patientExists)
+            {
+                throw new Exception($"Patient with ID {patientId} not found");
+            }
+
             // Create a dictionary to store all patient data
             var patientData = new Dictionary<string, object>();
 
@@ -79,6 +88,28 @@ namespace Phoenix_AzureAPI.Services
             {
                 patientData["Error"] = $"Error retrieving comprehensive patient data: {ex.Message}";
                 return patientData;
+            }
+        }
+
+        /// <summary>
+        /// Validate that a patient exists
+        /// </summary>
+        /// <param name="patientId">The patient identifier</param>
+        /// <returns>True if the patient exists, false otherwise</returns>
+        private async Task<bool> ValidatePatientExists(int patientId)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                var url = $"{_apiBaseUrl}/Patient/{patientId}";
+                
+                var response = await client.GetAsync(url);
+                
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 
