@@ -151,6 +151,7 @@ async function fetchResource(resourceType, resourceId = '') {
         showLoadingResource(true);
         showResourceContainer(false);
         showResourceError(false);
+        showNoResource(false); // Hide the "No resource loaded" message immediately when fetching
         
         let url;
         let useRegularApi = false;
@@ -283,6 +284,33 @@ function convertPatientToFhir(patient) {
 }
 
 // UI Functions
+function showLoadingResource(show) {
+    if (loadingResource) {
+        loadingResource.style.display = show ? 'block' : 'none';
+    }
+}
+
+function showResourceContainer(show) {
+    if (resourceContainer) {
+        resourceContainer.style.display = show ? 'block' : 'none';
+    }
+}
+
+function showResourceError(show, message = '') {
+    if (resourceError) {
+        resourceError.style.display = show ? 'block' : 'none';
+        if (show && resourceErrorMessage) {
+            resourceErrorMessage.textContent = message;
+        }
+    }
+}
+
+function showNoResource(show) {
+    if (noResource) {
+        noResource.style.display = show ? 'block' : 'none';
+    }
+}
+
 function showAlert(type, message) {
     if (!alertContainer) {
         console.error('Alert container not found');
@@ -305,33 +333,6 @@ function showAlert(type, message) {
             alertContainer.removeChild(alert);
         }, 150);
     }, 5000);
-}
-
-function showLoadingResource(show) {
-    if (loadingResource) {
-        loadingResource.style.display = show ? 'block' : 'none';
-    }
-}
-
-function showNoResource(show) {
-    if (noResource) {
-        noResource.style.display = show ? 'block' : 'none';
-    }
-}
-
-function showResourceError(show, message = '') {
-    if (resourceError) {
-        resourceError.style.display = show ? 'block' : 'none';
-        if (show && resourceErrorMessage) {
-            resourceErrorMessage.textContent = message;
-        }
-    }
-}
-
-function showResourceContainer(show) {
-    if (resourceContainer) {
-        resourceContainer.style.display = show ? 'block' : 'none';
-    }
 }
 
 function copyToClipboard(text) {
