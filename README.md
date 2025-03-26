@@ -52,6 +52,37 @@ The Phoenix project implements a flexible data source strategy:
    - **PatientFhirMapper**: Maps between domain Patient model and FHIR resources
    - **FhirService**: Handles serialization, deserialization, and validation of FHIR resources
 
+## Application Interfaces
+
+The Phoenix-Azure application provides multiple interfaces for accessing patient data, each designed for different use cases:
+
+### 1. Main Patient Portal (index.html)
+- Traditional healthcare application interface
+- Displays patient data in a user-friendly tabular format
+- Focuses on clinical workflow and patient management
+- Uses the regular API endpoint (`/api/Patient`)
+- Optimized for healthcare professionals and administrative staff
+
+### 2. FHIR Explorer (fhir-explorer.html)
+- Technical interface for exploring FHIR resources
+- Displays patient data in FHIR-compliant JSON format
+- Focuses on interoperability and standards compliance
+- Uses a hybrid approach:
+  - Fetches data from the regular API endpoint
+  - Transforms the data into FHIR-compliant format for display
+- Designed for developers and integration specialists
+
+### 3. Comprehensive Patient View (patient-comprehensive.html)
+- Aggregated view of patient data from multiple repositories
+- Combines demographics, medical records, medications, etc.
+- Provides a holistic view of the patient's health information
+- Ideal for clinical decision-making and care coordination
+
+### 4. Repository Explorer (repository-explorer.html)
+- Technical interface for exploring data repositories
+- Allows direct interaction with various data sources
+- Useful for system administrators and developers
+
 ## Quick Start Guide
 
 ### Prerequisites

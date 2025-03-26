@@ -167,6 +167,83 @@ async function fetchResource(resourceType, resourceId = '') {
 }
 ```
 
+### FHIR Explorer vs. Index Page
+
+The Phoenix-Azure application includes two main interfaces for viewing patient data:
+
+1. **Index Page** (`index.html`):
+   - Provides a traditional healthcare application interface
+   - Displays patient data in a user-friendly tabular format
+   - Focuses on clinical workflow and patient management
+   - Uses the regular API endpoint (`/api/Patient`)
+   - Returns data in a simple JSON format optimized for UI rendering
+
+2. **FHIR Explorer** (`fhir-explorer.html`):
+   - Provides a technical interface for exploring FHIR resources
+   - Displays patient data in FHIR-compliant JSON format
+   - Focuses on interoperability and standards compliance
+   - Uses a hybrid approach:
+     - Fetches data from the regular API endpoint (`/api/Patient`)
+     - Transforms the data into FHIR-compliant format for display
+     - Supports capability statements and other FHIR-specific features
+
+#### Data Flow Comparison
+
+**Index Page Data Flow:**
+```
+Client Request → API Server (/api/Patient) → PatientDataService → Azure API → SQL Database → Simple JSON Response → UI Rendering
+```
+
+**FHIR Explorer Data Flow:**
+```
+Client Request → API Server (/api/Patient) → PatientDataService → Azure API → SQL Database → Simple JSON Response → Client-side FHIR Transformation → FHIR JSON Display
+```
+
+This hybrid approach ensures that the FHIR Explorer works reliably while still providing the FHIR-compliant view that is essential for healthcare interoperability standards.
+
+#### Implementation Details
+
+The FHIR Explorer uses a client-side transformation function to convert regular patient data into FHIR format:
+
+```javascript
+function convertPatientToFhir(patient) {
+    return {
+        resourceType: "Patient",
+        id: patient.patientID.toString(),
+        meta: {
+            profile: ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]
+        },
+        name: [{
+            use: "official",
+            family: patient.last || "",
+            given: [patient.first || ""]
+        }],
+        gender: patient.gender ? patient.gender.toLowerCase() : "unknown",
+        birthDate: patient.birthDate || "",
+        address: [{
+            line: [patient.patientAddress || ""],
+            city: patient.city || "",
+            state: patient.state || "",
+            postalCode: patient.zip || ""
+        }],
+        telecom: [
+            {
+                system: "phone",
+                value: patient.phone || "",
+                use: "home"
+            },
+            {
+                system: "email",
+                value: patient.email || "",
+                use: "home"
+            }
+        ]
+    };
+}
+```
+
+This transformation ensures that the data displayed in the FHIR Explorer adheres to the FHIR standard, even though it's fetched from the regular API endpoint.
+
 ### PatientDataService
 
 The `PatientDataService` retrieves patient data from the Azure API:

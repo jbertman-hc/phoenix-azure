@@ -1,5 +1,6 @@
 // Configuration
-const API_BASE_URL = 'http://localhost:5300/api/fhir';
+const API_BASE_URL = 'http://localhost:5300/api';
+const FHIR_API_BASE_URL = 'http://localhost:5300/api/fhir';
 const DEFAULT_PATIENT_ID = '1001';
 
 // Global variables
@@ -93,40 +94,39 @@ async function fetchAvailablePatientIds() {
     try {
         console.log('Fetching available patient IDs');
         
-        const response = await fetch(`${API_BASE_URL}/PatientIds`, {
+        const response = await fetch(`${API_BASE_URL}/Patient`, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
-            },
-            mode: 'cors'
+            }
         });
         
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
         }
         
-        const patientIds = await response.json();
-        console.log('Available patient IDs:', patientIds);
+        const patients = await response.json();
+        console.log('Available patient IDs:', patients);
         
         // Display patient IDs in the UI
         if (patientIdsList) {
             patientIdsList.innerHTML = '';
             
-            if (patientIds.length === 0) {
+            if (patients.length === 0) {
                 patientIdsList.innerHTML = '<li class="list-group-item">No patient IDs available</li>';
             } else {
-                patientIds.forEach(id => {
+                patients.forEach(patient => {
                     const listItem = document.createElement('li');
                     listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
                     
                     const idSpan = document.createElement('span');
-                    idSpan.textContent = `Patient ID: ${id}`;
+                    idSpan.textContent = `Patient ID: ${patient.patientID} - ${patient.fullName}`;
                     
                     const useButton = document.createElement('button');
-                    useButton.className = 'btn btn-sm btn-outline-primary';
+                    useButton.className = 'btn btn-sm btn-primary';
                     useButton.textContent = 'Use';
                     useButton.addEventListener('click', () => {
-                        resourceIdInput.value = id;
+                        resourceIdInput.value = patient.patientID;
                         resourceTypeSelect.value = 'Patient';
                         selectedResourceType = 'Patient';
                     });
@@ -145,39 +145,42 @@ async function fetchAvailablePatientIds() {
     }
 }
 
-// API Functions
+// Fetch a FHIR resource from the API
 async function fetchResource(resourceType, resourceId = '') {
-    if (!resourceType) {
-        showAlert('warning', 'Please select a resource type');
-        return;
-    }
-    
     try {
         showLoadingResource(true);
-        showNoResource(false);
-        showResourceError(false);
         showResourceContainer(false);
+        showResourceError(false);
         
-        let url = `${API_BASE_URL}/${resourceType}`;
-        if (resourceId) {
-            url += `/${resourceId}`;
-            console.log('Fetching specific FHIR resource from:', url);
+        let url;
+        let useRegularApi = false;
+        
+        // For Patient resources, use the regular API that we know works
+        if (resourceType === 'Patient') {
+            url = `${API_BASE_URL}/${resourceType}`;
+            useRegularApi = true;
+            if (resourceId) {
+                url += `/${resourceId}`;
+            }
         } else {
-            console.log('Fetching all FHIR resources of type:', resourceType);
+            // For other resource types, try the FHIR API
+            url = `${FHIR_API_BASE_URL}/${resourceType}`;
+            if (resourceId) {
+                url += `/${resourceId}`;
+            }
         }
+        
+        console.log(`Fetching resource from: ${url}`);
         
         const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
-            },
-            mode: 'cors'
+            }
         });
         
-        console.log('API response status:', response.status);
-        
         if (response.status === 404) {
-            showResourceError(true, `Resource not found: ${resourceType}${resourceId ? '/' + resourceId : ''}`);
+            showResourceError(true, `Resource not found: ${resourceType}/${resourceId}`);
             return;
         }
         
@@ -189,9 +192,32 @@ async function fetchResource(resourceType, resourceId = '') {
         console.log('Raw API response received');
         
         try {
-            // Parse and format the JSON
+            // Parse the JSON
             const json = JSON.parse(responseText);
-            const formattedJson = JSON.stringify(json, null, 2);
+            
+            // If we're using the regular API, convert to FHIR-like format for display
+            let displayJson;
+            if (useRegularApi) {
+                if (Array.isArray(json)) {
+                    // Convert array of patients to FHIR Bundle
+                    displayJson = {
+                        resourceType: "Bundle",
+                        type: "searchset",
+                        total: json.length,
+                        entry: json.map(patient => ({
+                            resource: convertPatientToFhir(patient)
+                        }))
+                    };
+                } else {
+                    // Convert single patient to FHIR Patient
+                    displayJson = convertPatientToFhir(json);
+                }
+            } else {
+                displayJson = json;
+            }
+            
+            // Format the JSON for display
+            const formattedJson = JSON.stringify(displayJson, null, 2);
             
             // Display the JSON
             resourceJson.textContent = formattedJson;
@@ -214,6 +240,46 @@ async function fetchResource(resourceType, resourceId = '') {
     } finally {
         showLoadingResource(false);
     }
+}
+
+// Convert a regular Patient object to FHIR format for display
+function convertPatientToFhir(patient) {
+    return {
+        resourceType: "Patient",
+        id: patient.patientID.toString(),
+        meta: {
+            profile: ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]
+        },
+        text: {
+            status: "generated",
+            div: `<div xmlns="http://www.w3.org/1999/xhtml">${patient.fullName}</div>`
+        },
+        name: [{
+            use: "official",
+            family: patient.last || "",
+            given: [patient.first || ""]
+        }],
+        gender: patient.gender ? patient.gender.toLowerCase() : "unknown",
+        birthDate: patient.birthDate || "",
+        address: [{
+            line: [patient.patientAddress || ""],
+            city: patient.city || "",
+            state: patient.state || "",
+            postalCode: patient.zip || ""
+        }],
+        telecom: [
+            {
+                system: "phone",
+                value: patient.phone || "",
+                use: "home"
+            },
+            {
+                system: "email",
+                value: patient.email || "",
+                use: "home"
+            }
+        ]
+    };
 }
 
 // UI Functions
