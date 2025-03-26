@@ -1,5 +1,7 @@
 using Microsoft.OpenApi.Models;
 using Phoenix_AzureAPI.Services;
+using Phoenix_AzureAPI.Services.FHIR;
+using Phoenix_AzureAPI.Controllers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +22,11 @@ builder.Services.AddSwaggerGen(c =>
 
 // Register application services
 builder.Services.AddScoped<PatientDataService>();
+
+// Register FHIR services
+builder.Services.AddScoped<IFhirService, FhirService>();
+builder.Services.AddScoped<IPatientFhirMapper, PatientFhirMapper>();
+builder.Services.AddScoped<PatientController>();
 
 // Add CORS policy
 builder.Services.AddCors(options =>
