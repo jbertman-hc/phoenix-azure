@@ -104,10 +104,9 @@ The FHIR Explorer automatically loads all patients when the page is first opened
 
 ### Step 4: Explore Other Client Features
 
-The client application includes several other features:
-- `http://localhost:8080/index.html` - Main patient portal
-- `http://localhost:8080/patient-comprehensive.html` - Comprehensive patient view
-- `http://localhost:8080/repository-explorer.html` - Repository explorer
+The client application includes the following features:
+- `http://localhost:8080/index.html` - SQL Explorer (direct SQL data access)
+- `http://localhost:8080/fhir-explorer.html` - FHIR Explorer (FHIR-compliant resources)
 
 ## Implementation Details
 

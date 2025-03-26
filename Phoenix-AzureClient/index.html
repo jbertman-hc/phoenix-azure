@@ -24,13 +24,7 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link active" href="index.html">Patients</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="repository-explorer.html">Repository Explorer</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="patient-comprehensive.html">Comprehensive Patient View</a>
+                        <a class="nav-link active" href="index.html">SQL Explorer</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="fhir-explorer.html">FHIR Explorer</a>
@@ -43,32 +37,38 @@
     <div class="container mt-4">
         <div class="jumbotron bg-light p-5 rounded">
             <h1 class="display-4">Phoenix-Azure</h1>
-            <p class="lead">A modern healthcare application that demonstrates integration between a .NET Core API and a JavaScript client.</p>
+            <p class="lead">A proof of concept application demonstrating healthcare data integration and FHIR interoperability.</p>
             <hr class="my-4">
-            <p>Explore the features below to learn more about the application.</p>
+            <p>This application showcases two key capabilities:</p>
+            <ol>
+                <li>Connecting to the AmazingCharts API endpoint (<code>https://apiserviceswin20250318.azurewebsites.net/api</code>) to import patient data directly</li>
+                <li>Transforming that same data into standardized FHIR resources for healthcare interoperability</li>
+            </ol>
+            <p>The local API server acts as a proxy to handle CORS issues while connecting to the Azure-hosted endpoint.</p>
         </div>
 
         <div class="row mt-4">
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
                     <div class="card-header bg-primary text-white">
-                        <h5>Repository Explorer</h5>
+                        <h5>Patient List (AmazingCharts Direct)</h5>
                     </div>
                     <div class="card-body">
-                        <p class="card-text">Explore available repositories and their methods. Execute repository methods and view the results.</p>
-                        <a href="repository-explorer.html" class="btn btn-primary">Open Repository Explorer</a>
+                        <p class="card-text">View patient data in a traditional healthcare interface format. This view connects to the AmazingCharts API endpoint (<code>https://apiserviceswin20250318.azurewebsites.net/api</code>) and displays patient information in a user-friendly tabular format.</p>
+                        <p class="card-text text-muted">This demonstrates standard API integration for healthcare applications.</p>
+                        <a href="#patientListView" class="btn btn-primary">View Patient List</a>
                     </div>
                 </div>
             </div>
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
                     <div class="card-header bg-primary text-white">
-                        <h5>Comprehensive Patient View</h5>
+                        <h5>FHIR Explorer</h5>
                     </div>
                     <div class="card-body">
-                        <p class="card-text">Access complete patient information aggregated from multiple repositories in one unified view. Includes demographics, medical records, medications, and more.</p>
-                        <p class="card-text text-muted">This feature demonstrates how to collate patient data from different repositories to build a complete patient profile.</p>
-                        <a href="patient-comprehensive.html" class="btn btn-primary">View Patient Data</a>
+                        <p class="card-text">Explore the same patient data transformed into FHIR-compliant resources. This view demonstrates healthcare interoperability using the FHIR standard.</p>
+                        <p class="card-text text-muted">See how the same data can be represented in a standardized format for healthcare data exchange.</p>
+                        <a href="fhir-explorer.html" class="btn btn-primary">Open FHIR Explorer</a>
                     </div>
                 </div>
             </div>
@@ -79,7 +79,7 @@
         <!-- Patient List View -->
         <div id="patientListView">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1>Patient List</h1>
+                <h1>Patient List (AmazingCharts Direct)</h1>
                 <div class="input-group" style="max-width: 300px;">
                     <input type="text" class="form-control" placeholder="Search patients..." id="searchInput">
                     <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">Clear</button>
@@ -121,7 +121,7 @@
         <div id="patientDetailView" style="display: none;">
             <div class="mb-3">
                 <button class="btn btn-secondary" id="backToListBtn">
-                    <i class="bi bi-arrow-left"></i> Back to Patient List
+                    <i class="bi bi-arrow-left"></i> Back to AmazingCharts Patient List
                 </button>
             </div>
 
@@ -141,7 +141,12 @@
                 <div class="card mb-4">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h3 class="mb-0">Patient Information</h3>
-                        <span id="patientStatus" class="badge bg-success">Active</span>
+                        <div>
+                            <a id="viewFhirBtn" href="#" class="btn btn-info btn-sm me-2">
+                                <i class="bi bi-code-slash"></i> View as FHIR
+                            </a>
+                            <span id="patientStatus" class="badge bg-success">Active</span>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="row">

@@ -26,15 +26,32 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM content loaded, initializing FHIR Explorer');
     initializeResourceTypeSelect();
     
-    // Set default patient ID
+    // Check for patient ID in URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const patientIdParam = urlParams.get('patientId');
+    
+    // Set patient ID from URL parameter or use default
     if (resourceIdInput) {
-        resourceIdInput.value = DEFAULT_PATIENT_ID;
+        if (patientIdParam) {
+            resourceIdInput.value = patientIdParam;
+            // Set resource type to Patient
+            if (resourceTypeSelect) {
+                resourceTypeSelect.value = 'Patient';
+            }
+        } else {
+            resourceIdInput.value = DEFAULT_PATIENT_ID;
+        }
     }
     
     fetchAvailablePatientIds();
     
-    // Automatically fetch all patients on startup
-    fetchResource('Patient', '');
+    // If patient ID was provided in URL, fetch that specific patient
+    if (patientIdParam) {
+        fetchResource('Patient', patientIdParam);
+    } else {
+        // Otherwise fetch all patients as before
+        fetchResource('Patient', '');
+    }
     
     if (fetchResourceBtn) {
         fetchResourceBtn.addEventListener('click', () => {

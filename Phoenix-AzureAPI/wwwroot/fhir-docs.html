@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phoenix FHIR API Documentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3 {
+            color: #0066cc;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .endpoint {
+            background-color: #e6f3ff;
+            padding: 15px;
+            border-left: 5px solid #0066cc;
+            margin-bottom: 20px;
+        }
+        .response {
+            background-color: #f0f8f0;
+            padding: 15px;
+            border-left: 5px solid #4CAF50;
+            margin-top: 10px;
+        }
+        button {
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0055aa;
+        }
+        .diagram {
+            width: 100%;
+            max-width: 800px;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .flow-step {
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #e6f3ff;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Phoenix FHIR API Documentation</h1>
+    
+    <h2>Overview</h2>
+    <p>
+        The Phoenix-Azure FHIR integration allows the system to expose patient data from an Azure SQL database as FHIR-compliant resources,
+        enabling interoperability with other healthcare systems.
+    </p>
+
+    <h2>Data Flow Diagram</h2>
+    <div class="diagram">
+        <h3>SQL Database → FHIR Resources</h3>
+        <div class="flow-step">1. <strong>Data Source (Azure SQL Database)</strong> - Patient data stored in SQL tables</div>
+        <div class="flow-step">2. <strong>Data Access Layer</strong> - PatientDataService retrieves data from SQL</div>
+        <div class="flow-step">3. <strong>Mapping Layer</strong> - PatientFhirMapper transforms SQL model to FHIR resources</div>
+        <div class="flow-step">4. <strong>FHIR Service Layer</strong> - FhirService handles serialization and validation</div>
+        <div class="flow-step">5. <strong>API Layer</strong> - FhirController exposes standardized FHIR endpoints</div>
+        <div class="flow-step">6. <strong>Response Format</strong> - Standard FHIR JSON (application/fhir+json)</div>
+    </div>
+
+    <h2>API Endpoints</h2>
+    
+    <div class="endpoint">
+        <h3>FHIR Capability Statement</h3>
+        <code>GET /api/fhir/metadata</code>
+        <p>Returns a FHIR CapabilityStatement resource describing the capabilities of the FHIR server.</p>
+        <button onclick="fetchCapabilityStatement()">Try It</button>
+        <div id="capability-response" class="response" style="display: none;"></div>
+    </div>
+    
+    <div class="endpoint">
+        <h3>Get Patient by ID</h3>
+        <code>GET /api/fhir/Patient/{id}</code>
+        <p>Returns a FHIR Patient resource for the specified patient ID.</p>
+        <button onclick="fetchPatient(1)">Try It (Patient 1)</button>
+        <div id="patient-response" class="response" style="display: none;"></div>
+    </div>
+    
+    <div class="endpoint">
+        <h3>Get All Patients</h3>
+        <code>GET /api/fhir/Patient</code>
+        <p>Returns a FHIR Bundle resource containing all patients.</p>
+        <button onclick="fetchAllPatients()">Try It</button>
+        <div id="all-patients-response" class="response" style="display: none;"></div>
+    </div>
+
+    <h2>Running the Application</h2>
+    <p>To run the Phoenix FHIR API:</p>
+    <pre><code>cd Phoenix-AzureAPI
+dotnet run</code></pre>
+    <p>The API will be available at <code>http://localhost:5300</code></p>
+
+    <script>
+        function syntaxHighlight(json) {
+            if (typeof json !== 'string') {
+                json = JSON.stringify(json, undefined, 2);
+            }
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                var cls = 'number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'key';
+                    } else {
+                        cls = 'string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        async function fetchCapabilityStatement() {
+            try {
+                const response = await fetch('http://localhost:5300/api/fhir/metadata', {
+                    headers: {
+                        'Accept': 'application/fhir+json'
+                    }
+                });
+                const data = await response.json();
+                document.getElementById('capability-response').innerHTML = '<pre>' + syntaxHighlight(data) + '</pre>';
+                document.getElementById('capability-response').style.display = 'block';
+            } catch (error) {
+                document.getElementById('capability-response').innerHTML = '<p>Error: ' + error.message + '</p>';
+                document.getElementById('capability-response').style.display = 'block';
+            }
+        }
+
+        async function fetchPatient(id) {
+            try {
+                const response = await fetch(`http://localhost:5300/api/fhir/Patient/${id}`, {
+                    headers: {
+                        'Accept': 'application/fhir+json'
+                    }
+                });
+                const data = await response.json();
+                document.getElementById('patient-response').innerHTML = '<pre>' + syntaxHighlight(data) + '</pre>';
+                document.getElementById('patient-response').style.display = 'block';
+            } catch (error) {
+                document.getElementById('patient-response').innerHTML = '<p>Error: ' + error.message + '</p>';
+                document.getElementById('patient-response').style.display = 'block';
+            }
+        }
+
+        async function fetchAllPatients() {
+            try {
+                const response = await fetch('http://localhost:5300/api/fhir/Patient', {
+                    headers: {
+                        'Accept': 'application/fhir+json'
+                    }
+                });
+                const data = await response.json();
+                document.getElementById('all-patients-response').innerHTML = '<pre>' + syntaxHighlight(data) + '</pre>';
+                document.getElementById('all-patients-response').style.display = 'block';
+            } catch (error) {
+                document.getElementById('all-patients-response').innerHTML = '<p>Error: ' + error.message + '</p>';
+                document.getElementById('all-patients-response').style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
