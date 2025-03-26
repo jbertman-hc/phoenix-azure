@@ -83,7 +83,7 @@ namespace Phoenix_AzureAPI.Controllers
                 }
                 
                 // Fallback to local implementation if the API call fails
-                var localRepositoriesMap = await _patientDataService.GetPatientDataRepositoriesMap();
+                var localRepositoriesMap = _patientDataService.GetPatientDataRepositoriesMap();
                 return Ok(localRepositoriesMap);
             }
             catch (Exception ex)
