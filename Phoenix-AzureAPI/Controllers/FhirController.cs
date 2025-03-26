@@ -83,37 +83,48 @@ namespace Phoenix_AzureAPI.Controllers
         /// </summary>
         /// <returns>A Bundle of FHIR Patient resources</returns>
         [HttpGet("Patient")]
-        [Produces("application/fhir+json")]
+        [ProducesResponseType(typeof(Bundle), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Produces("application/fhir+json")] // This specifies that we return FHIR-formatted JSON
         public async Task<IActionResult> GetAllPatients()
         {
             try
             {
-                // Get all patients from the database
+                _logger.LogInformation("Getting all FHIR Patients");
+                
+                // Step 1: Get all patients from the database as domain models
+                // This calls the GetAllPatientsFromDatabase method which uses PatientDataService
+                // to fetch patients from the addendum endpoint
                 var patients = await GetAllPatientsFromDatabase();
                 
-                // Map to FHIR Patients
+                // Step 2: Map domain Patient models to FHIR Patient resources
+                // The PatientMapper converts our internal Patient model to the FHIR standard format
                 var fhirPatients = patients.Select(p => _patientMapper.MapToFhir(p)).ToList();
                 
-                // Create a Bundle
+                // Step 3: Create a FHIR Bundle to contain all the Patient resources
+                // A Bundle is a FHIR-specific container that groups multiple resources together
                 var bundle = new Bundle
                 {
-                    Type = Bundle.BundleType.Searchset,
-                    Total = fhirPatients.Count
+                    Type = Bundle.BundleType.Searchset, // Indicates this is a search result
+                    Total = fhirPatients.Count // Number of patients in the bundle
                 };
                 
-                // Add entries to the bundle
+                // Step 4: Add each FHIR Patient resource to the Bundle as an entry
                 foreach (var fhirPatient in fhirPatients)
                 {
                     bundle.Entry.Add(new Bundle.EntryComponent
                     {
-                        Resource = fhirPatient,
-                        FullUrl = $"Patient/{fhirPatient.Id}"
+                        Resource = fhirPatient, // The actual FHIR Patient resource
+                        FullUrl = $"Patient/{fhirPatient.Id}" // A relative URL for this resource
                     });
                 }
                 
-                // Serialize to JSON
+                // Step 5: Serialize the Bundle to FHIR JSON format
+                // This ensures the output conforms to the FHIR specification
                 var json = _fhirService.SerializeToJson(bundle);
                 
+                // Step 6: Return the serialized Bundle with the correct FHIR content type
+                // The content type is important for FHIR clients to recognize this as FHIR data
                 return Content(json, "application/fhir+json");
             }
             catch (Exception ex)
@@ -200,34 +211,45 @@ namespace Phoenix_AzureAPI.Controllers
         [HttpPost("$validate")]
         [Produces("application/fhir+json")]
         [Consumes("application/json", "application/fhir+json")]
-        public IActionResult ValidateResource([FromBody] object resourceJson)
+        public IActionResult ValidateResource([FromBody] JObject request)
         {
             try
             {
-                _logger.LogInformation($"Received request for validation");
+                _logger.LogInformation("Received request for validation");
                 
-                if (resourceJson == null)
+                if (request == null)
                 {
                     return BadRequest("No resource provided for validation");
                 }
 
-                // Convert the resource to a string if it's not already
-                string jsonString = resourceJson.ToString();
-                if (resourceJson is JsonElement jsonElement)
+                // Extract the resource from the request
+                JToken resourceToken = null;
+                
+                // Check if the request has a resourceToValidate property
+                if (request.TryGetValue("resourceToValidate", out resourceToken))
                 {
-                    jsonString = jsonElement.GetRawText();
+                    _logger.LogInformation("Found resourceToValidate in request");
                 }
                 else
                 {
-                    jsonString = System.Text.Json.JsonSerializer.Serialize(resourceJson);
+                    // If not, assume the entire request is the resource
+                    resourceToken = request;
+                    _logger.LogInformation("Using entire request as resource");
                 }
                 
-                _logger.LogInformation($"Parsed resource JSON: {jsonString}");
+                if (resourceToken == null)
+                {
+                    return BadRequest("No resource provided for validation");
+                }
+
+                // Convert the resource to a string
+                string jsonString = resourceToken.ToString();
+                _logger.LogInformation("Parsed resource JSON: {JsonString}", jsonString);
                 
                 Resource resource;
                 try {
                     resource = _fhirService.ParseResource(jsonString);
-                    _logger.LogInformation($"Successfully parsed resource of type: {resource.TypeName}");
+                    _logger.LogInformation("Successfully parsed resource of type: {ResourceType}", resource.TypeName);
                 }
                 catch (Exception ex)
                 {

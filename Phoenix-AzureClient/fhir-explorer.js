@@ -1,106 +1,174 @@
 // Configuration
 const API_BASE_URL = 'http://localhost:5300/api';
-const FHIR_API_BASE_URL = 'http://localhost:5300/api/fhir';
+const FHIR_API_BASE_URL = `${API_BASE_URL}/fhir`;
 const DEFAULT_PATIENT_ID = '1001';
 
 // Global variables
-let resourceTypes = ['Patient', 'Practitioner', 'Organization', 'Encounter', 'Observation'];
-let selectedResourceType = 'Patient';
+const resourceTypes = [
+    'Bundle:Patient List',
+    'Patient', 
+    'Capability Statement'
+];
+let selectedResourceType = 'Bundle:Patient List'; // Default to Patient Bundle
 let currentResource = null; // Store the current resource for validation
 
 // DOM Elements
-const resourceTypeSelect = document.getElementById('resourceType');
-const resourceIdInput = document.getElementById('resourceId');
-const fetchResourceBtn = document.getElementById('fetchResource');
-const validateResourceBtn = document.getElementById('validateResource');
-const loadingResource = document.getElementById('loadingResource');
-const noResource = document.getElementById('noResource');
-const resourceError = document.getElementById('resourceError');
-const resourceErrorMessage = document.getElementById('resourceErrorMessage');
-const resourceContainer = document.getElementById('resourceContainer');
-const resourceJson = document.getElementById('resourceJson');
-const copyJsonBtn = document.getElementById('copyJson');
-const alertContainer = document.getElementById('alertContainer');
-const patientIdsList = document.getElementById('patientIdsList');
-const validationResultCard = document.getElementById('validationResultCard');
-const loadingValidation = document.getElementById('loadingValidation');
-const validationSummary = document.getElementById('validationSummary');
-const validationIssues = document.getElementById('validationIssues');
+let resourceTypeSelect;
+let resourceIdInput;
+let fetchResourceBtn;
+let validateResourceBtn;
+let validateResourceButtonTop;
+let copyJsonBtn;
+let resourceJson;
+let resourceHeaderElement;
+let resourceContainer;
+let loadingResource;
+let resourceError;
+let noResource;
+let alertContainer;
+let validationResults;
+let patientIdsList;
+let validationResultCard;
+let loadingValidation;
+let validationSummary;
+let validationIssues;
 
-// Event Listeners
-document.addEventListener('DOMContentLoaded', () => {
+// Handle page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize UI elements
+    initializeUI();
+    
+    // Load default resource if specified in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const resourceTypeParam = urlParams.get('resourceType');
+    const resourceIdParam = urlParams.get('resourceId');
+    const patientIdParam = urlParams.get('patientId');
+    
+    if (resourceTypeParam) {
+        // Set the resource type select
+        if (resourceTypeSelect) {
+            const matchingOption = Array.from(resourceTypeSelect.options).find(option => 
+                option.value === resourceTypeParam
+            );
+            
+            if (matchingOption) {
+                resourceTypeSelect.value = resourceTypeParam;
+                console.log(`Set resource type from URL: ${resourceTypeParam}`);
+                
+                // If we have a resource ID, set that too
+                if (resourceIdParam && resourceIdInput) {
+                    resourceIdInput.value = resourceIdParam;
+                    console.log(`Set resource ID from URL: ${resourceIdParam}`);
+                } else if (patientIdParam && resourceIdInput && resourceTypeParam === 'Patient') {
+                    resourceIdInput.value = patientIdParam;
+                    console.log(`Set patient ID from URL: ${patientIdParam}`);
+                }
+                
+                // Fetch the resource
+                if (fetchResourceBtn) {
+                    console.log('Auto-fetching resource from URL parameters');
+                    fetchResourceBtn.click();
+                }
+            }
+        }
+    } else {
+        // Always auto-load the Patient Bundle on page load
+        console.log('Auto-loading Patient Bundle');
+        fetchResource('Bundle:Patient List', '');
+    }
+});
+
+// Initialize UI elements
+function initializeUI() {
+    // Get DOM elements
+    resourceTypeSelect = document.getElementById('resourceType');
+    resourceIdInput = document.getElementById('resourceId');
+    fetchResourceBtn = document.getElementById('fetchResource');
+    validateResourceBtn = document.getElementById('validateResource');
+    validateResourceButtonTop = document.getElementById('validateResourceButton');
+    copyJsonBtn = document.getElementById('copyJson');
+    resourceJson = document.getElementById('resourceJson');
+    resourceHeaderElement = document.getElementById('resourceHeader');
+    resourceContainer = document.getElementById('resourceContainer');
+    loadingResource = document.getElementById('loadingResource');
+    resourceError = document.getElementById('resourceError');
+    noResource = document.getElementById('noResource');
+    alertContainer = document.getElementById('alertContainer');
+    validationResults = document.getElementById('validationResults');
+    patientIdsList = document.getElementById('patientIdsList');
+    validationResultCard = document.getElementById('validationResultCard');
+    loadingValidation = document.getElementById('loadingValidation');
+    validationSummary = document.getElementById('validationSummary');
+    validationIssues = document.getElementById('validationIssues');
+    
     console.log('DOM content loaded, initializing FHIR Explorer');
     initializeResourceTypeSelect();
     
-    // Check for patient ID in URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const patientIdParam = urlParams.get('patientId');
+    // Try to fetch available patient IDs
+    try {
+        fetchAvailablePatientIds();
+    } catch (error) {
+        console.error('Error fetching patient IDs:', error);
+    }
     
-    // Set patient ID from URL parameter or use default
-    if (resourceIdInput) {
-        if (patientIdParam) {
-            resourceIdInput.value = patientIdParam;
-            // Set resource type to Patient
-            if (resourceTypeSelect) {
-                resourceTypeSelect.value = 'Patient';
+    // Populate resource type select
+    if (resourceTypeSelect) {
+        resourceTypes.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type;
+            resourceTypeSelect.appendChild(option);
+        });
+        
+        // Set default resource type
+        resourceTypeSelect.value = selectedResourceType;
+        
+        // Add event listener for resource type change
+        resourceTypeSelect.addEventListener('change', function() {
+            selectedResourceType = this.value;
+            
+            // Show/hide resource ID input based on resource type
+            if (resourceIdInput) {
+                const resourceIdContainer = document.getElementById('resourceIdContainer');
+                if (selectedResourceType === 'Bundle:Patient List' || selectedResourceType === 'Capability Statement') {
+                    if (resourceIdContainer) resourceIdContainer.style.display = 'none';
+                } else {
+                    if (resourceIdContainer) resourceIdContainer.style.display = 'block';
+                }
             }
-        } else {
-            resourceIdInput.value = DEFAULT_PATIENT_ID;
-        }
+        });
+        
+        // Trigger change event to set initial visibility
+        resourceTypeSelect.dispatchEvent(new Event('change'));
     }
     
-    fetchAvailablePatientIds();
-    
-    // If patient ID was provided in URL, fetch that specific patient
-    if (patientIdParam) {
-        fetchResource('Patient', patientIdParam);
-    } else {
-        // Otherwise fetch all patients as before
-        fetchResource('Patient', '');
-    }
-    
+    // Add event listeners
     if (fetchResourceBtn) {
-        fetchResourceBtn.addEventListener('click', () => {
-            const resourceType = resourceTypeSelect.value;
-            const resourceId = resourceIdInput.value.trim();
+        fetchResourceBtn.addEventListener('click', function() {
+            const resourceType = resourceTypeSelect ? resourceTypeSelect.value : selectedResourceType;
+            const resourceId = resourceIdInput ? resourceIdInput.value : '';
             fetchResource(resourceType, resourceId);
         });
-    } else {
-        console.error('Fetch resource button not found');
     }
     
     if (validateResourceBtn) {
-        validateResourceBtn.addEventListener('click', () => {
-            validateResource();
-        });
-    } else {
-        console.error('Validate resource button not found');
+        validateResourceBtn.addEventListener('click', validateCurrentResource);
+    }
+    
+    if (validateResourceButtonTop) {
+        validateResourceButtonTop.addEventListener('click', validateCurrentResource);
     }
     
     if (copyJsonBtn) {
-        copyJsonBtn.addEventListener('click', () => {
-            copyToClipboard(resourceJson.textContent);
-        });
-    } else {
-        console.error('Copy JSON button not found');
-    }
-    
-    if (resourceTypeSelect) {
-        resourceTypeSelect.addEventListener('change', () => {
-            selectedResourceType = resourceTypeSelect.value;
-            console.log('Selected resource type:', selectedResourceType);
-            
-            // Clear resource ID if not Patient
-            if (selectedResourceType !== 'Patient') {
-                resourceIdInput.value = '';
-            } else {
-                resourceIdInput.value = DEFAULT_PATIENT_ID;
+        copyJsonBtn.addEventListener('click', function() {
+            if (resourceJson && resourceJson.textContent) {
+                navigator.clipboard.writeText(resourceJson.textContent)
+                    .then(() => showAlert('success', 'JSON copied to clipboard!'))
+                    .catch(err => showAlert('danger', `Error copying to clipboard: ${err}`));
             }
         });
-    } else {
-        console.error('Resource type select not found');
     }
-});
+}
 
 // Initialize resource type select
 function initializeResourceTypeSelect() {
@@ -176,335 +244,419 @@ async function fetchAvailablePatientIds() {
     }
 }
 
-// Fetch a FHIR resource from the API
-async function fetchResource(resourceType, resourceId = '') {
+// Function to fetch a FHIR resource
+async function fetchResource(resourceType, resourceId) {
     try {
-        showLoadingResource(true);
+        showLoadingResource(true, `Loading ${resourceType}...`);
         showResourceContainer(false);
         showResourceError(false);
-        showNoResource(false); // Hide the "No resource loaded" message immediately when fetching
-        showValidationResults(false); // Hide validation results when fetching a new resource
+        showNoResource(false);
+        showValidationResults(false);
         
-        let url;
-        let useRegularApi = false;
+        let url = '';
         
-        // For Patient resources, use the regular API that we know works
-        if (resourceType === 'Patient') {
-            url = `${API_BASE_URL}/${resourceType}`;
-            useRegularApi = true;
-            if (resourceId) {
-                url += `/${resourceId}`;
-            }
+        if (resourceType === 'Bundle:Patient List') {
+            // Use the FHIR Patient endpoint to get all patients as a Bundle
+            url = `${FHIR_API_BASE_URL}/Patient`;
+            console.log('Fetching Patient Bundle from:', url);
+        } else if (resourceType === 'Patient') {
+            // Use the FHIR Patient endpoint with ID
+            url = `${FHIR_API_BASE_URL}/Patient/${resourceId}`;
+            console.log('Fetching Patient from:', url);
+        } else if (resourceType === 'Capability Statement') {
+            // Use the metadata endpoint for capability statement
+            url = `${FHIR_API_BASE_URL}/metadata`;
+            console.log('Fetching Capability Statement from:', url);
         } else {
-            // For other resource types, try the FHIR API
-            url = `${FHIR_API_BASE_URL}/${resourceType}`;
-            if (resourceId) {
-                url += `/${resourceId}`;
-            }
+            // For other FHIR resources
+            url = `${FHIR_API_BASE_URL}/${resourceType}${resourceId ? `/${resourceId}` : ''}`;
+            console.log('Fetching resource from:', url);
         }
-        
-        console.log(`Fetching resource from: ${url}`);
         
         const response = await fetch(url, {
             method: 'GET',
             headers: {
-                'Accept': 'application/json'
+                'Accept': 'application/json, application/fhir+json'
             }
         });
         
-        if (response.status === 404) {
-            showResourceError(true, `Resource not found: ${resourceType}/${resourceId}`);
-            showLoadingResource(false);
-            validateResourceBtn.disabled = true;
-            currentResource = null;
-            return;
-        }
+        console.log('Response status:', response.status, 'Content-Type:', response.headers.get('Content-Type'));
         
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`API error (${response.status}):`, errorText);
+            showResourceError(true, `Error: ${response.status} ${response.statusText}`);
             throw new Error(`API error: ${response.status}`);
         }
         
-        let data = await response.json();
-        
-        // If we used the regular API, convert to FHIR format
-        if (useRegularApi) {
-            if (Array.isArray(data)) {
-                // If it's an array of patients
-                data = {
-                    resourceType: 'Bundle',
-                    type: 'searchset',
-                    total: data.length,
-                    entry: data.map(patient => ({
-                        resource: convertPatientToFhir(patient)
-                    }))
-                };
-            } else {
-                // If it's a single patient
-                data = convertPatientToFhir(data);
+        // Parse the response
+        const responseText = await response.text();
+        try {
+            currentResource = JSON.parse(responseText);
+            console.log('Resource loaded:', currentResource);
+            
+            // If this is a patient list but not in a Bundle format, convert it to a Bundle
+            if (resourceType === 'Bundle:Patient List' && currentResource) {
+                // Check if it's already a Bundle or needs conversion
+                if (!currentResource.resourceType) {
+                    // Convert the patient list to a FHIR Bundle
+                    const patientResources = Array.isArray(currentResource) ? 
+                        currentResource.map(patient => {
+                            // Convert regular Patient model to FHIR Patient resource
+                            return {
+                                resourceType: 'Patient',
+                                id: patient.patientID?.toString() || patient.PatientID?.toString() || '1',
+                                name: [{
+                                    given: [patient.firstName || patient.FirstName || 'Unknown'],
+                                    family: patient.lastName || patient.LastName || 'Unknown'
+                                }],
+                                birthDate: patient.birthDate || patient.BirthDate || null
+                            };
+                        }) : [];
+                    
+                    // Create a proper FHIR Bundle
+                    currentResource = {
+                        resourceType: 'Bundle',
+                        type: 'searchset',
+                        total: patientResources.length,
+                        entry: patientResources.map(resource => ({
+                            resource: resource,
+                            fullUrl: `Patient/${resource.id}`
+                        }))
+                    };
+                    console.log('Converted patient list to Bundle:', currentResource);
+                }
             }
+            
+            // Update the UI with the resource
+            displayResource(currentResource, resourceType);
+            
+            // Enable the validate button
+            if (validateResourceBtn) {
+                validateResourceBtn.disabled = false;
+            }
+            
+            return currentResource;
+        } catch (jsonError) {
+            console.error('Error parsing JSON:', jsonError);
+            showResourceError(true, 'Invalid JSON response from API');
+            throw new Error('Invalid JSON response');
         }
-        
-        // Store the current resource for validation
-        currentResource = data;
-        
-        // Format the JSON for display
-        const formattedJson = JSON.stringify(data, null, 2);
-        
-        // Display the resource
-        resourceJson.textContent = formattedJson;
-        showResourceContainer(true);
-        showLoadingResource(false);
-        copyJsonBtn.style.display = 'block';
-        
-        // Enable the validate button
-        validateResourceBtn.disabled = false;
-        
-        console.log('Resource fetched successfully:', data);
     } catch (error) {
         console.error('Error fetching resource:', error);
-        showResourceError(true, `Error fetching resource: ${error.message}`);
+        showAlert(`Error fetching resource: ${error}`, 'danger');
         showLoadingResource(false);
-        validateResourceBtn.disabled = true;
-        currentResource = null;
+        return null;
     }
 }
 
 // Validate the current FHIR resource
-async function validateResource() {
+async function validateCurrentResource() {
     if (!currentResource) {
-        showAlert('warning', 'No resource to validate. Please fetch a resource first.');
+        showAlert('No resource to validate. Please fetch a resource first.', 'warning');
         return;
     }
     
     try {
-        // Show loading indicator
-        document.getElementById('loadingValidation').style.display = 'block';
-        document.getElementById('validationResultCard').style.display = 'block';
-        document.getElementById('validationSummary').innerHTML = '';
-        document.getElementById('validationIssues').innerHTML = '';
+        showLoadingResource(true, "Validating FHIR resource against standard profiles...");
+        showValidationResults(false);
         
-        console.log('Validating resource:', currentResource);
-        const requestBody = JSON.stringify(currentResource);
-        console.log('Request body:', requestBody);
+        console.log('Validating resource:', currentResource.resourceType);
         
-        // Call the validation endpoint
-        const response = await fetch(`${FHIR_API_BASE_URL}/$validate`, {
+        // Prepare the request
+        const url = `${FHIR_API_BASE_URL}/$validate`;
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json, application/fhir+json'
+                'Content-Type': 'application/json'
             },
-            body: requestBody
+            body: JSON.stringify({
+                resourceToValidate: currentResource
+            })
         });
         
-        console.log('Response status:', response.status);
-        console.log('Response headers:', Object.fromEntries([...response.headers]));
-        
-        let validationOutcome;
-        try {
-            const responseText = await response.text();
-            console.log('Raw validation response:', responseText);
-            
-            if (responseText.trim()) {
-                try {
-                    validationOutcome = JSON.parse(responseText);
-                    console.log('Validation outcome:', validationOutcome);
-                } catch (parseError) {
-                    console.error('Error parsing JSON:', parseError);
-                    // If the response is not valid JSON, display it as text
-                    throw new Error(`Invalid JSON response: ${responseText}`);
-                }
-            } else {
-                throw new Error('Empty response from validation server');
-            }
-        } catch (jsonError) {
-            console.error('Error parsing validation response:', jsonError);
-            throw new Error(`Failed to parse validation response: ${jsonError.message}`);
-        }
-        
         if (!response.ok) {
-            // Handle HTTP error status codes
-            let errorMessage = `Validation error (${response.status}): `;
-            
-            if (validationOutcome && validationOutcome.issue && validationOutcome.issue.length > 0) {
-                // Extract error message from OperationOutcome if available
-                errorMessage += validationOutcome.issue[0].diagnostics || 'Unknown error';
-            } else {
-                errorMessage += 'Server error during validation';
-            }
-            
-            throw new Error(errorMessage);
+            const errorText = await response.text();
+            console.error(`Validation API error (${response.status}): ${errorText}`);
+            showAlert(`Error validating resource: ${errorText || response.statusText}`, 'danger');
+            return;
         }
         
-        // Display validation results
-        displayValidationResults(validationOutcome);
+        // Parse the validation results
+        const validationResults = await response.json();
+        console.log('Validation results:', validationResults);
+        
+        // Display the validation results
+        displayValidationResults(validationResults);
+        
+        // Show a summary alert based on validation outcome
+        if (validationResults.issue && validationResults.issue.length > 0) {
+            // Count issues by severity
+            const errorCount = validationResults.issue.filter(i => i.severity === 'error').length;
+            const warningCount = validationResults.issue.filter(i => i.severity === 'warning').length;
+            const infoCount = validationResults.issue.filter(i => i.severity === 'information').length;
+            
+            if (errorCount > 0) {
+                showAlert(`Validation found ${errorCount} error(s), ${warningCount} warning(s), and ${infoCount} info message(s).`, 'danger');
+            } else if (warningCount > 0) {
+                showAlert(`Validation successful with ${warningCount} warning(s) and ${infoCount} info message(s).`, 'warning');
+            } else {
+                showAlert('Validation successful with minor notes. See details below.', 'info');
+            }
+        } else {
+            showAlert('Validation successful! The resource is valid according to FHIR standards.', 'success');
+        }
     } catch (error) {
         console.error('Error validating resource:', error);
-        
-        // Show error in validation results
-        document.getElementById('validationSummary').className = 'alert alert-danger';
-        document.getElementById('validationSummary').innerHTML = `
-            <i class="bi bi-exclamation-triangle-fill"></i> 
-            ${error.message || 'Error validating resource. Please check the console for details.'}
-        `;
-        document.getElementById('validationIssues').innerHTML = '';
+        showAlert(`Error validating resource: ${error.message}`, 'danger');
     } finally {
-        document.getElementById('loadingValidation').style.display = 'none';
+        showLoadingResource(false);
     }
 }
 
 // Display validation results
-function displayValidationResults(outcome) {
-    const validationSummary = document.getElementById('validationSummary');
-    const validationIssues = document.getElementById('validationIssues');
-    
-    // Make sure the elements are visible
-    validationSummary.style.display = 'block';
-    
-    if (!outcome || !outcome.issue || outcome.issue.length === 0) {
-        // No issues found, show success
-        validationSummary.className = 'alert alert-success';
-        validationSummary.innerHTML = '<i class="bi bi-check-circle-fill"></i> Resource is valid according to FHIR specifications.';
-        validationIssues.innerHTML = '';
+function displayValidationResults(operationOutcome) {
+    if (!operationOutcome) {
+        console.error('No validation results to display');
         return;
     }
     
-    // Count issues by severity
-    const issueCount = {
-        error: 0,
-        warning: 0,
-        information: 0,
-        note: 0
-    };
+    console.log('Displaying validation results:', operationOutcome);
     
-    outcome.issue.forEach(issue => {
-        const severity = issue.severity.toLowerCase();
-        if (issueCount.hasOwnProperty(severity)) {
-            issueCount[severity]++;
+    // Get the validation results container
+    const resultsContainer = document.getElementById('validationResultsContent');
+    if (!resultsContainer) {
+        console.error('Validation results container not found');
+        return;
+    }
+    
+    // Clear previous results
+    resultsContainer.innerHTML = '';
+    
+    // Check if we have issues to display
+    if (operationOutcome.issue && operationOutcome.issue.length > 0) {
+        // Create a summary
+        const totalIssues = operationOutcome.issue.length;
+        const errorCount = operationOutcome.issue.filter(i => i.severity === 'error').length;
+        const warningCount = operationOutcome.issue.filter(i => i.severity === 'warning').length;
+        const infoCount = operationOutcome.issue.filter(i => i.severity === 'information').length;
+        
+        let summaryClass = 'alert-success';
+        if (errorCount > 0) {
+            summaryClass = 'alert-danger';
+        } else if (warningCount > 0) {
+            summaryClass = 'alert-warning';
+        } else if (infoCount > 0) {
+            summaryClass = 'alert-info';
         }
-    });
-    
-    // Determine overall validation status
-    let validationStatus = 'success';
-    let statusMessage = 'Resource is valid according to FHIR specifications.';
-    
-    if (issueCount.error > 0) {
-        validationStatus = 'danger';
-        statusMessage = `Resource is invalid. Found ${issueCount.error} error(s).`;
-    } else if (issueCount.warning > 0) {
-        validationStatus = 'warning';
-        statusMessage = `Resource is valid but has ${issueCount.warning} warning(s).`;
-    } else if (issueCount.information > 0 || issueCount.note > 0) {
-        validationStatus = 'info';
-        statusMessage = 'Resource is valid but has informational messages.';
-    }
-    
-    // Display summary
-    validationSummary.className = `alert alert-${validationStatus}`;
-    validationSummary.innerHTML = `<i class="bi bi-${validationStatus === 'success' ? 'check' : 'info'}-circle-fill"></i> ${statusMessage}`;
-    
-    // Display detailed issues
-    validationIssues.innerHTML = '<div class="list-group mt-3">';
-    outcome.issue.forEach(issue => {
-        const severity = issue.severity.toLowerCase();
-        let severityClass = 'secondary';
         
-        if (severity === 'error') severityClass = 'danger';
-        else if (severity === 'warning') severityClass = 'warning';
-        else if (severity === 'information') severityClass = 'info';
-        
-        validationIssues.innerHTML += `
-            <div class="list-group-item list-group-item-${severityClass}">
-                <div class="d-flex w-100 justify-content-between">
-                    <h5 class="mb-1">${severity.charAt(0).toUpperCase() + severity.slice(1)}</h5>
-                    <small>${issue.code || 'N/A'}</small>
-                </div>
-                <p class="mb-1">${issue.diagnostics || 'No details provided'}</p>
-                ${issue.expression ? `<small>Location: ${issue.expression.join(', ')}</small>` : ''}
-            </div>
+        // Add summary
+        const summary = document.createElement('div');
+        summary.className = `alert ${summaryClass} mb-3`;
+        summary.innerHTML = `
+            <h6 class="mb-0">Validation Summary</h6>
+            <p class="mb-0">
+                Found ${totalIssues} issue(s): ${errorCount} error(s), ${warningCount} warning(s), ${infoCount} information message(s)
+            </p>
         `;
-    });
-    validationIssues.innerHTML += '</div>';
+        resultsContainer.appendChild(summary);
+        
+        // Create a list for the issues
+        const issuesList = document.createElement('div');
+        issuesList.className = 'validation-issues';
+        
+        // Add each issue
+        operationOutcome.issue.forEach((issue, index) => {
+            const issueDiv = document.createElement('div');
+            
+            // Set class based on severity
+            let severityClass = '';
+            switch (issue.severity) {
+                case 'error':
+                    severityClass = 'validation-error';
+                    break;
+                case 'warning':
+                    severityClass = 'validation-warning';
+                    break;
+                case 'information':
+                    severityClass = 'validation-information';
+                    break;
+                default:
+                    severityClass = 'validation-information';
+            }
+            
+            issueDiv.className = `validation-issue ${severityClass}`;
+            
+            // Format the issue details
+            let issueContent = `
+                <div class="d-flex justify-content-between">
+                    <strong>${issue.severity.toUpperCase()}</strong>
+                    <span class="text-muted small">Code: ${issue.code || 'N/A'}</span>
+                </div>
+            `;
+            
+            // Add diagnostics if available
+            if (issue.diagnostics) {
+                issueContent += `<p class="mb-0">${issue.diagnostics}</p>`;
+            }
+            
+            // Add location if available
+            if (issue.location && issue.location.length > 0) {
+                issueContent += `<p class="small text-muted mb-0">Location: ${issue.location.join(', ')}</p>`;
+            }
+            
+            issueDiv.innerHTML = issueContent;
+            issuesList.appendChild(issueDiv);
+        });
+        
+        resultsContainer.appendChild(issuesList);
+    } else {
+        // No issues found - valid resource
+        const validMessage = document.createElement('div');
+        validMessage.className = 'alert alert-success';
+        validMessage.innerHTML = `
+            <h6 class="mb-0"><i class="bi bi-check-circle-fill"></i> Resource is Valid</h6>
+            <p class="mb-0">No issues were found with this FHIR resource.</p>
+        `;
+        resultsContainer.appendChild(validMessage);
+    }
+    
+    // Show the validation results section
+    showValidationResults(true);
 }
 
-// Get Bootstrap class for severity
-function getSeverityClass(severity) {
-    switch (severity.toLowerCase()) {
-        case 'error': return 'danger';
-        case 'warning': return 'warning';
-        case 'information': return 'info';
-        case 'note': return 'secondary';
-        default: return 'secondary';
+// Show/hide validation results
+function showValidationResults(show) {
+    const validationResults = document.getElementById('validationResults');
+    if (validationResults) {
+        validationResults.style.display = show ? 'block' : 'none';
     }
 }
 
-// Show validation error
-function showValidationError(message) {
-    validationSummary.className = 'alert alert-danger';
-    validationSummary.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> Error validating resource: ${message}`;
-    validationSummary.style.display = 'block';
+// Show resource error
+function showResourceError(show, message = '') {
+    const resourceError = document.getElementById('resourceError');
+    const errorMessage = document.getElementById('errorMessage');
+    
+    if (resourceError) {
+        resourceError.style.display = show ? 'block' : 'none';
+        
+        if (errorMessage && message) {
+            errorMessage.textContent = message;
+        }
+    }
 }
 
-// Clear validation results
-function clearValidationResults() {
-    validationSummary.style.display = 'none';
-    validationIssues.innerHTML = '';
+// Show alert message
+function showAlert(message, type = 'info') {
+    const alertContainer = document.getElementById('alertContainer');
+    if (!alertContainer) return;
+    
+    // Create alert element
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type} alert-dismissible fade show`;
+    alert.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    // Add to container
+    alertContainer.appendChild(alert);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        if (alert.parentNode === alertContainer) {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }
+    }, 5000);
 }
 
-// Show/hide validation results card
-function showValidationResults(show) {
-    validationResultCard.style.display = show ? 'block' : 'none';
-}
-
-// Show/hide validation loading indicator
-function showLoadingValidation(show) {
-    loadingValidation.style.display = show ? 'block' : 'none';
-}
-
-// Convert a regular Patient object to FHIR format for display
-function convertPatientToFhir(patient) {
-    return {
-        resourceType: "Patient",
-        id: patient.patientID.toString(),
-        meta: {
-            profile: ["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"]
-        },
-        text: {
-            status: "generated",
-            div: `<div xmlns="http://www.w3.org/1999/xhtml">${patient.fullName}</div>`
-        },
-        name: [{
-            use: "official",
-            family: patient.last || "",
-            given: [patient.first || ""]
-        }],
-        gender: patient.gender ? patient.gender.toLowerCase() : "unknown",
-        birthDate: patient.birthDate || "",
-        address: [{
-            line: [patient.patientAddress || ""],
-            city: patient.city || "",
-            state: patient.state || "",
-            postalCode: patient.zip || ""
-        }],
-        telecom: [
-            {
-                system: "phone",
-                value: patient.phone || "",
-                use: "home"
-            },
-            {
-                system: "email",
-                value: patient.email || "",
-                use: "home"
-            }
-        ]
-    };
+// Display a FHIR resource in the UI
+function displayResource(resource, resourceType) {
+    if (!resource) {
+        showNoResource(true);
+        return;
+    }
+    
+    // Update resource header
+    if (resourceHeaderElement) {
+        let headerText = resource.resourceType || resourceType;
+        if (resource.id) {
+            headerText += ` (ID: ${resource.id})`;
+        }
+        resourceHeaderElement.textContent = headerText;
+    }
+    
+    // Format and display the JSON
+    if (resourceJson) {
+        resourceJson.textContent = JSON.stringify(resource, null, 2);
+        
+        // Apply syntax highlighting if available
+        if (window.hljs) {
+            window.hljs.highlightElement(resourceJson);
+        }
+    }
+    
+    // If this is a Bundle with patients, show the patient list
+    if (resource.resourceType === 'Bundle' && resource.entry && patientIdsList) {
+        patientIdsList.innerHTML = '';
+        
+        const patients = resource.entry.filter(entry => 
+            entry.resource && entry.resource.resourceType === 'Patient'
+        ).map(entry => entry.resource);
+        
+        if (patients.length === 0) {
+            patientIdsList.innerHTML = '<li class="list-group-item">No patients found in bundle</li>';
+        } else {
+            patients.forEach(patient => {
+                const listItem = document.createElement('li');
+                listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                
+                const idSpan = document.createElement('span');
+                const patientId = patient.id;
+                
+                // Get patient name
+                let patientName = 'Unknown';
+                if (patient.name && patient.name.length > 0) {
+                    const name = patient.name[0];
+                    const given = name.given ? name.given.join(' ') : '';
+                    const family = name.family || '';
+                    patientName = `${given} ${family}`.trim();
+                }
+                
+                idSpan.textContent = `${patientName} (ID: ${patientId})`;
+                
+                const viewButton = document.createElement('button');
+                viewButton.className = 'btn btn-sm btn-primary';
+                viewButton.textContent = 'View Details';
+                viewButton.addEventListener('click', () => {
+                    if (resourceTypeSelect) resourceTypeSelect.value = 'Patient';
+                    if (resourceIdInput) resourceIdInput.value = patientId;
+                    fetchResource('Patient', patientId);
+                });
+                
+                listItem.appendChild(idSpan);
+                listItem.appendChild(viewButton);
+                patientIdsList.appendChild(listItem);
+            });
+        }
+    }
+    
+    // Show the resource container
+    showResourceContainer(true);
+    showLoadingResource(false);
 }
 
 // UI Functions
-function showLoadingResource(show) {
+function showLoadingResource(show, message = '') {
     if (loadingResource) {
         loadingResource.style.display = show ? 'block' : 'none';
+        if (show && message) {
+            loadingResource.innerHTML = `<i class="bi bi-spinner bi-spin"></i> ${message}`;
+        } else {
+            loadingResource.innerHTML = '';
+        }
     }
 }
 
@@ -512,14 +664,15 @@ function showResourceContainer(show) {
     if (resourceContainer) {
         resourceContainer.style.display = show ? 'block' : 'none';
     }
-}
-
-function showResourceError(show, message = '') {
-    if (resourceError) {
-        resourceError.style.display = show ? 'block' : 'none';
-        if (show && resourceErrorMessage) {
-            resourceErrorMessage.textContent = message;
-        }
+    
+    // Also show/hide the copy button
+    if (copyJsonBtn) {
+        copyJsonBtn.style.display = show ? 'block' : 'none';
+    }
+    
+    // Hide loading indicator when showing the resource
+    if (show && loadingResource) {
+        loadingResource.style.display = 'none';
     }
 }
 
@@ -529,37 +682,24 @@ function showNoResource(show) {
     }
 }
 
-function showAlert(type, message) {
-    if (!alertContainer) {
-        console.error('Alert container not found');
-        return;
-    }
-    
-    const alert = document.createElement('div');
-    alert.className = `alert alert-${type} alert-dismissible fade show`;
-    alert.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
-    
-    alertContainer.appendChild(alert);
-    
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-        alert.classList.remove('show');
-        setTimeout(() => {
-            alertContainer.removeChild(alert);
-        }, 150);
-    }, 5000);
-}
-
 function copyToClipboard(text) {
-    navigator.clipboard.writeText(text)
-        .then(() => {
-            showAlert('success', 'JSON copied to clipboard');
-        })
-        .catch(err => {
-            console.error('Error copying to clipboard:', err);
-            showAlert('danger', 'Failed to copy to clipboard');
-        });
+    try {
+        // Create a temporary textarea element
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        
+        // Select and copy the text
+        textarea.select();
+        document.execCommand('copy');
+        
+        // Remove the temporary element
+        document.body.removeChild(textarea);
+        
+        // Show success message
+        showAlert('JSON copied to clipboard', 'success');
+    } catch (error) {
+        console.error('Error copying to clipboard:', error);
+        showAlert('Failed to copy to clipboard: ' + error.message, 'danger');
+    }
 }

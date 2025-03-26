@@ -63,6 +63,13 @@
                         <a class="nav-link" href="fhir-demo.html">FHIR Demo</a>
                     </li>
                 </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="fhir-explorer.html?resourceType=Bundle:Patient%20List">
+                            <i class="bi bi-people"></i> Patient Bundle
+                        </a>
+                    </li>
+                </ul>
             </div>
         </div>
     </nav>
@@ -89,12 +96,25 @@
                             <select class="form-select" id="resourceType">
                                 <!-- Options will be populated by JavaScript -->
                             </select>
+                            <small class="form-text text-muted mt-1">
+                                Patient Bundle is loaded automatically on page load.
+                            </small>
                         </div>
-                        <div class="mb-3">
+                        <div class="mb-3" id="resourceIdContainer">
                             <label for="resourceId" class="form-label">Resource ID (optional)</label>
-                            <input type="text" class="form-control" id="resourceId" placeholder="Leave empty to fetch all">
+                            <input type="text" class="form-control" id="resourceId" placeholder="Enter ID if needed">
+                            <small class="form-text text-muted mt-1">
+                                Only required for individual Patient resources.
+                            </small>
                         </div>
-                        <button class="btn btn-primary" id="fetchResource">Fetch Resource</button>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-primary" id="fetchResource">
+                                <i class="bi bi-cloud-download"></i> Fetch Resource
+                            </button>
+                            <button class="btn btn-success" id="validateResource" disabled>
+                                <i class="bi bi-check-circle"></i> Validate Resource
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -102,69 +122,55 @@
             <div class="col-md-8">
                 <div class="card mb-4">
                     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">FHIR Resource Viewer</h5>
-                        <button class="btn btn-sm btn-light" id="copyJson" style="display: none;">
-                            <i class="bi bi-clipboard"></i> Copy JSON
-                        </button>
+                        <h5 class="mb-0">Resource Details</h5>
+                        <div>
+                            <button class="btn btn-sm btn-light me-2" id="copyJson">
+                                <i class="bi bi-clipboard"></i> Copy JSON
+                            </button>
+                            <button class="btn btn-sm btn-light" id="validateResourceButton">Validate</button>
+                        </div>
                     </div>
                     <div class="card-body">
-                        <div id="loadingResource" class="text-center my-5" style="display: none;">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
+                        <!-- Loading indicator -->
+                        <div id="loadingResource" class="text-center my-4" style="display: none;">
+                            <div class="d-flex flex-column align-items-center">
+                                <div class="spinner-border text-primary mb-3" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <div id="loadingMessage" class="text-muted">
+                                    <p>Processing FHIR resource...</p>
+                                    <small>This may take a moment as we fetch, parse, and validate the data.</small>
+                                </div>
                             </div>
-                            <p class="mt-2">Loading FHIR resource...</p>
                         </div>
                         
-                        <div id="noResource" class="text-center my-5">
-                            <i class="bi bi-file-earmark-text" style="font-size: 3rem;"></i>
-                            <p class="mt-2">No resource loaded. Select a resource type and click "Fetch Resource".</p>
-                        </div>
-                        
+                        <!-- Error message -->
                         <div id="resourceError" class="alert alert-danger" style="display: none;">
-                            <i class="bi bi-exclamation-triangle-fill"></i>
-                            <span id="resourceErrorMessage"></span>
+                            <h5><i class="bi bi-exclamation-triangle-fill"></i> Error</h5>
+                            <p id="errorMessage">Failed to load resource.</p>
                         </div>
                         
+                        <!-- No resource loaded message -->
+                        <div id="noResource" class="alert alert-info">
+                            <h5><i class="bi bi-info-circle-fill"></i> No Resource Loaded</h5>
+                            <p>Select a resource type and click "Fetch Resource" to get started.</p>
+                            <p>You can also use the "Patient Bundle" link in the navigation bar to view all patients.</p>
+                        </div>
+                        
+                        <!-- Resource container -->
                         <div id="resourceContainer" style="display: none;">
-                            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 1rem; background-color: #f8f9fa;">
-                                <pre id="resourceJson"></pre>
-                            </div>
+                            <div id="resourceHeader"></div>
+                            <pre><code class="language-json" id="resourceJson"></code></pre>
                         </div>
-                    </div>
-                    <div class="card-footer">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <button class="btn btn-success" id="validateResource" disabled>
-                                    <i class="bi bi-check-circle"></i> Validate Resource
-                                </button>
-                            </div>
-                            <div class="text-muted small">
-                                <i class="bi bi-info-circle"></i> Validation powered by Firely .NET SDK
-                            </div>
-                        </div>
-                        <div class="mt-2 small text-muted">
-                            Validates FHIR resources against standard profiles, checking required fields, data types, and structural constraints.
+                        
+                        <!-- Validation results -->
+                        <div id="validationResults" class="mt-4" style="display: none;">
+                            <h5><i class="bi bi-check-circle"></i> Validation Results</h5>
+                            <div id="validationResultsContent"></div>
                         </div>
                     </div>
                 </div>
                 
-                <div class="card" id="validationResultCard" style="display: none;">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0">Validation Results</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="loadingValidation" class="text-center my-3" style="display: none;">
-                            <div class="spinner-border text-success" role="status">
-                                <span class="visually-hidden">Validating...</span>
-                            </div>
-                            <p class="mt-2">Validating FHIR resource...</p>
-                        </div>
-                        
-                        <div id="validationSummary" class="alert"></div>
-                        
-                        <div id="validationIssues"></div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>

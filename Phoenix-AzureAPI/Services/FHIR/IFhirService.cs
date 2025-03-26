@@ -28,6 +28,20 @@ namespace Phoenix_AzureAPI.Services.FHIR
         /// Validates a FHIR resource against standard profiles
         /// </summary>
         ValidationResult Validate(Base resource);
+        
+        /// <summary>
+        /// Validates and fixes a FHIR resource during creation
+        /// </summary>
+        /// <param name="resource">The resource to validate and fix</param>
+        /// <returns>The resource with any fixes applied</returns>
+        Resource ValidateAndFixResource(Resource resource);
+
+        /// <summary>
+        /// Validates a FHIR resource against standard profiles
+        /// </summary>
+        /// <param name="resource">The FHIR resource to validate</param>
+        /// <returns>An OperationOutcome with validation results</returns>
+        OperationOutcome ValidateResource(Resource resource);
     }
 
     /// <summary>

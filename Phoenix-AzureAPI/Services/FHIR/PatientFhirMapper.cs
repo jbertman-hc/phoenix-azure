@@ -76,7 +76,7 @@ namespace Phoenix_AzureAPI.Services.FHIR
                 Gender = MapGender(source.Gender ?? string.Empty) ?? AdministrativeGender.Unknown,
                 
                 // Set birth date with proper format
-                BirthDate = source.BirthDate?.ToString("yyyy-MM-dd"),
+                BirthDate = source.BirthDate.HasValue ? source.BirthDate.Value.ToString("yyyy-MM-ddTHH:mm:ss")?.Split('T').First() : null,
                 
                 // Set contact information
                 Telecom = new List<ContactPoint>(),
