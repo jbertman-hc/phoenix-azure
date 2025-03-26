@@ -284,16 +284,21 @@ async function validateResource() {
         document.getElementById('validationIssues').innerHTML = '';
         
         console.log('Validating resource:', currentResource);
+        const requestBody = JSON.stringify(currentResource);
+        console.log('Request body:', requestBody);
         
         // Call the validation endpoint
         const response = await fetch(`${FHIR_API_BASE_URL}/$validate`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/fhir+json',
-                'Accept': 'application/fhir+json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json, application/fhir+json'
             },
-            body: JSON.stringify(currentResource)
+            body: requestBody
         });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', Object.fromEntries([...response.headers]));
         
         let validationOutcome;
         try {
@@ -301,8 +306,14 @@ async function validateResource() {
             console.log('Raw validation response:', responseText);
             
             if (responseText.trim()) {
-                validationOutcome = JSON.parse(responseText);
-                console.log('Validation outcome:', validationOutcome);
+                try {
+                    validationOutcome = JSON.parse(responseText);
+                    console.log('Validation outcome:', validationOutcome);
+                } catch (parseError) {
+                    console.error('Error parsing JSON:', parseError);
+                    // If the response is not valid JSON, display it as text
+                    throw new Error(`Invalid JSON response: ${responseText}`);
+                }
             } else {
                 throw new Error('Empty response from validation server');
             }

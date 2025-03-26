@@ -13,6 +13,7 @@ using Hl7.Fhir.Model;
 using Hl7.Fhir.Rest;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Text.Json;
 
 namespace Phoenix_AzureAPI.Controllers
 {
@@ -199,30 +200,33 @@ namespace Phoenix_AzureAPI.Controllers
         [HttpPost("$validate")]
         [Produces("application/fhir+json")]
         [Consumes("application/json", "application/fhir+json")]
-        public async Task<IActionResult> ValidateResource()
+        public IActionResult ValidateResource([FromBody] object resourceJson)
         {
             try
             {
-                // Read the request body as a string
-                string requestBody;
-                using (var reader = new StreamReader(Request.Body, System.Text.Encoding.UTF8))
-                {
-                    requestBody = await reader.ReadToEndAsync();
-                }
+                _logger.LogInformation($"Received request for validation");
                 
-                if (string.IsNullOrWhiteSpace(requestBody))
+                if (resourceJson == null)
                 {
                     return BadRequest("No resource provided for validation");
                 }
 
-                _logger.LogInformation($"Received request for validation: {requestBody}");
+                // Convert the resource to a string if it's not already
+                string jsonString = resourceJson.ToString();
+                if (resourceJson is JsonElement jsonElement)
+                {
+                    jsonString = jsonElement.GetRawText();
+                }
+                else
+                {
+                    jsonString = System.Text.Json.JsonSerializer.Serialize(resourceJson);
+                }
                 
-                // Try to parse the JSON to extract the resource
-                string resourceJson = requestBody;
+                _logger.LogInformation($"Parsed resource JSON: {jsonString}");
                 
                 Resource resource;
                 try {
-                    resource = _fhirService.ParseResource(resourceJson);
+                    resource = _fhirService.ParseResource(jsonString);
                     _logger.LogInformation($"Successfully parsed resource of type: {resource.TypeName}");
                 }
                 catch (Exception ex)
@@ -245,11 +249,6 @@ namespace Phoenix_AzureAPI.Controllers
                     
                     var errorJson = _fhirService.SerializeToJson(errorOutcome);
                     return BadRequest(errorJson);
-                }
-                
-                if (resource == null)
-                {
-                    return BadRequest("Invalid resource format");
                 }
                 
                 // Validate the resource
