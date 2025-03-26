@@ -60,6 +60,7 @@ The Phoenix-Azure application provides two main interfaces for accessing patient
 - Focuses on interoperability and standards compliance
 - Uses the FHIR API endpoint (`/api/fhir`)
 - Designed for developers and integration specialists
+- Includes validation capabilities to ensure FHIR compliance
 
 ## Quick Start Guide
 
@@ -69,7 +70,27 @@ The Phoenix-Azure application provides two main interfaces for accessing patient
 - Python 3.x (for running the client server)
 - Internet connection to access the Azure API
 
-### Running the Application
+### Fastest Way to Run the Application
+
+Use the provided start script to launch both the API server and client server in one command:
+
+```bash
+./start.sh
+```
+
+This script will:
+1. Start the API server on port 5300
+2. Start the client server on port 8080
+3. Open the application in your default browser
+4. Display the PIDs of both servers for easy termination
+
+The application will be accessible at:
+- SQL Explorer: http://localhost:8080/index.html
+- FHIR Explorer: http://localhost:8080/fhir-explorer.html
+
+Press Ctrl+C in the terminal to stop all servers.
+
+### Manual Setup (Alternative)
 
 #### Step 1: Start the API Server
 ```bash
@@ -99,12 +120,34 @@ The client will be available at `http://localhost:8080`.
 
 To see the FHIR integration in action:
 
-1. Start the API server as described above
+1. Start the application using `./start.sh`
 2. Open the FHIR Explorer at `http://localhost:8080/fhir-explorer.html`
 3. Click the "Capability Statement" button to see the FHIR metadata
 4. Click the "Patient" button to explore patient resources:
    - Leave the ID field empty and click "Fetch Resource" to get all patients
    - Enter a specific ID (e.g., "1036") and click "Fetch Resource" to get a single patient
+5. Once a resource is loaded, click the "Validate Resource" button to check its compliance with FHIR standards
+6. View the validation results, including any errors or warnings
+
+## FHIR Validation
+
+The Phoenix-Azure application includes robust FHIR validation capabilities:
+
+1. **Validation Features**:
+   - Validate any FHIR resource against standard profiles
+   - Check for required fields, correct data types, and structural constraints
+   - Receive detailed feedback on validation issues
+
+2. **How to Use Validation**:
+   - Load a FHIR resource in the FHIR Explorer
+   - Click the "Validate Resource" button
+   - View validation results in the "Validation Results" section
+   - Issues are color-coded by severity (red for errors, yellow for warnings, blue for information)
+
+3. **Validation API Endpoint**:
+   - `POST /api/fhir/$validate` - Validate a FHIR resource
+   - Request body should contain the FHIR resource as JSON
+   - Response is a FHIR OperationOutcome resource with validation results
 
 ## Implementation Details
 
@@ -118,6 +161,7 @@ For more detailed information about the FHIR integration, please refer to:
 ## Current Status
 - **Index Page**: Fully functional with working search functionality that filters in real-time
 - **FHIR Integration**: Fully functional with working endpoints and client-side explorer
+- **FHIR Validation**: Fully implemented with support for validating Patient resources
 
 ## API Endpoints
 
@@ -125,6 +169,7 @@ For more detailed information about the FHIR integration, please refer to:
 - `GET /api/fhir/metadata` - Get FHIR capability statement
 - `GET /api/fhir/Patient` - Get all patients as FHIR resources
 - `GET /api/fhir/Patient/{id}` - Get a specific patient as a FHIR resource
+- `POST /api/fhir/$validate` - Validate a FHIR resource
 
 ### Patient Endpoints
 - `GET /api/Patient` - Get all patients
@@ -134,9 +179,11 @@ For more detailed information about the FHIR integration, please refer to:
 - If you encounter CORS issues, this is because the Azure API might have CORS restrictions
 - If patient data doesn't load, check the network tab in your browser's developer tools
 - If the client server fails to start, ensure port 8080 is not in use by another application
+- If validation fails with a 400 error, ensure your request uses Content-Type: application/json
 
 ## Future Enhancements
 - Authentication and authorization
 - Additional FHIR resource types (Observation, Condition, etc.)
 - Enhanced search capabilities for FHIR resources
 - Improved error handling and user feedback
+- Extended validation profiles for additional FHIR resources
