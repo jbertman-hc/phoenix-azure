@@ -2,6 +2,7 @@ using Microsoft.OpenApi.Models;
 using Phoenix_AzureAPI.Services;
 using Phoenix_AzureAPI.Services.FHIR;
 using Phoenix_AzureAPI.Controllers;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +51,9 @@ if (app.Environment.IsDevelopment())
 
 // Apply CORS before other middleware
 app.UseCors("AllowAll");
+
+// Serve static files from wwwroot
+app.UseStaticFiles();
 
 app.UseRouting();
 app.UseAuthorization();

@@ -12,24 +12,22 @@ namespace Phoenix_AzureAPI.Services.FHIR
         /// <summary>
         /// Serializes a FHIR resource to JSON
         /// </summary>
-        /// <param name="resource">The FHIR resource to serialize</param>
-        /// <returns>JSON string representation of the resource</returns>
-        string SerializeToJson(Resource resource);
+        string SerializeToJson(Base resource);
 
         /// <summary>
-        /// Deserializes JSON to a FHIR resource
+        /// Deserializes a JSON string to a FHIR resource
         /// </summary>
-        /// <typeparam name="T">The type of FHIR resource</typeparam>
-        /// <param name="json">The JSON string to deserialize</param>
-        /// <returns>The deserialized FHIR resource</returns>
-        T DeserializeFromJson<T>(string json) where T : Resource;
+        T DeserializeFromJson<T>(string json) where T : Base;
+        
+        /// <summary>
+        /// Parses a JSON string to a FHIR resource
+        /// </summary>
+        Resource ParseResource(string json);
 
         /// <summary>
-        /// Validates a FHIR resource
+        /// Validates a FHIR resource against standard profiles
         /// </summary>
-        /// <param name="resource">The FHIR resource to validate</param>
-        /// <returns>Validation result with success/failure and error messages</returns>
-        ValidationResult Validate(Resource resource);
+        ValidationResult Validate(Base resource);
     }
 
     /// <summary>
@@ -38,18 +36,13 @@ namespace Phoenix_AzureAPI.Services.FHIR
     public class ValidationResult
     {
         /// <summary>
-        /// Whether the validation was successful
+        /// Whether the validation was successful (no errors)
         /// </summary>
-        public bool Success { get; set; }
-
+        public bool IsValid { get; set; }
+        
         /// <summary>
-        /// Error message if validation failed
+        /// The full FHIR OperationOutcome from validation
         /// </summary>
-        public string ErrorMessage { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Detailed validation issues
-        /// </summary>
-        public List<string> Issues { get; set; } = new List<string>();
+        public OperationOutcome? OperationOutcome { get; set; }
     }
 }

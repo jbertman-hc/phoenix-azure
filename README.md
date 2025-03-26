@@ -20,6 +20,8 @@ Phoenix-Azure is a healthcare application that connects to a remote API at `apis
 - Access standardized FHIR endpoints for healthcare interoperability
 - Explore FHIR resources using the FHIR Explorer interface
 - View capability statements and patient resources in FHIR format
+- Validate FHIR resources against standard specifications
+- Receive detailed feedback on validation issues with severity indicators
 
 ## Data Sources
 

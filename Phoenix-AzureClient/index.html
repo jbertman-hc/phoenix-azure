@@ -24,10 +24,13 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link active" href="index.html">SQL Explorer</a>
+                        <a class="nav-link active" href="index.html" id="patientsLink">SQL Explorer</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="fhir-explorer.html">FHIR Explorer</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="fhir-demo.html">FHIR Demo</a>
                     </li>
                 </ul>
             </div>
@@ -35,10 +38,8 @@
     </nav>
 
     <div class="container mt-4">
-        <div class="jumbotron bg-light p-5 rounded">
+        <div class="jumbotron bg-light p-2 rounded">
             <h1 class="display-4">Phoenix-Azure</h1>
-            <p class="lead">A proof of concept application demonstrating healthcare data integration and FHIR interoperability.</p>
-            <hr class="my-4">
             <p>This application showcases two key capabilities:</p>
             <ol>
                 <li>Connecting to the AmazingCharts API endpoint (<code>https://apiserviceswin20250318.azurewebsites.net/api</code>) to import patient data directly</li>
@@ -51,11 +52,11 @@
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
                     <div class="card-header bg-primary text-white">
-                        <h5>Patient List (AmazingCharts Direct)</h5>
+                        <h5>Patient List (Direct)</h5>
                     </div>
                     <div class="card-body">
-                        <p class="card-text">View patient data in a traditional healthcare interface format. This view connects to the AmazingCharts API endpoint (<code>https://apiserviceswin20250318.azurewebsites.net/api</code>) and displays patient information in a user-friendly tabular format.</p>
-                        <p class="card-text text-muted">This demonstrates standard API integration for healthcare applications.</p>
+                        <p class="card-text">View patient data using Adam's POCOs via AmazingCharts API endpoint (<code>https://apiserviceswin20250318.azurewebsites.net/api</code>) and displays patient information in a tabular format.</p>
+                        <p class="card-text text-muted">This demonstrates standard API integration to existing SQLServer Amazing Charts database exposed at the endpoint above.</p>
                         <a href="#patientListView" class="btn btn-primary">View Patient List</a>
                     </div>
                 </div>
@@ -63,7 +64,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
                     <div class="card-header bg-primary text-white">
-                        <h5>FHIR Explorer</h5>
+                        <h5>FHIR Transformed</h5>
                     </div>
                     <div class="card-body">
                         <p class="card-text">Explore the same patient data transformed into FHIR-compliant resources. This view demonstrates healthcare interoperability using the FHIR standard.</p>
@@ -79,7 +80,7 @@
         <!-- Patient List View -->
         <div id="patientListView">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1>Patient List (AmazingCharts Direct)</h1>
+                <h1>Patient List</h1>
                 <div class="input-group" style="max-width: 300px;">
                     <input type="text" class="form-control" placeholder="Search patients..." id="searchInput">
                     <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">Clear</button>

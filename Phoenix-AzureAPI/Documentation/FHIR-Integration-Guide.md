@@ -24,6 +24,86 @@ The Phoenix project implements a flexible data source strategy that allows switc
    - **PatientFhirMapper**: Maps between domain Patient model and FHIR Patient resources
    - **FhirService**: Handles serialization, deserialization, and validation of FHIR resources
 
+## FHIR Validation
+
+The Phoenix-Azure project includes comprehensive FHIR validation capabilities to ensure that generated FHIR resources conform to standard specifications.
+
+### Validation Architecture
+
+1. **Backend Validation Service**
+   - The `FhirService` class includes a `Validate()` method that uses the Firely SDK to validate FHIR resources against standard profiles
+   - Validation is performed using the built-in `IsValidWithResult()` extension method from the Firely SDK
+   - The validation process checks for:
+     - Required fields and cardinality
+     - Data type correctness
+     - Value set bindings
+     - Structural constraints
+     - FHIRPath constraints
+
+2. **Validation Endpoint**
+   - The `FhirController` exposes a `$validate` endpoint at `/api/fhir/$validate`
+   - This endpoint accepts a FHIR resource as JSON in the request body with Content-Type `application/fhir+json`
+   - It returns a FHIR OperationOutcome resource containing validation results
+   - HTTP status codes indicate validation success (200 OK) or failure (422 Unprocessable Entity)
+
+3. **Validation Results**
+   - Results are returned as a FHIR OperationOutcome resource
+   - Each validation issue includes:
+     - Severity (error, warning, information)
+     - Code (issue type)
+     - Diagnostics (human-readable description)
+     - Location (path to the problematic element)
+
+### UI Integration
+
+1. **FHIR Explorer Page**
+   - The FHIR Explorer page includes a "Validate Resource" button below the JSON viewer
+   - Clicking this button sends the current resource to the validation endpoint
+   - Validation results are displayed in a dedicated section with color-coded severity indicators
+   - Success messages are shown when resources are valid
+   - Issues are grouped by severity and include detailed diagnostic information
+
+2. **FHIR Demo Page**
+   - The FHIR Demo page also includes validation capabilities
+   - Validation results appear in a dedicated tab
+   - The same color-coding and severity indicators are used for consistency
+
+### Error Handling
+
+1. **Client-Side**
+   - The client handles various error scenarios:
+     - Empty or invalid responses from the server
+     - HTTP error status codes
+     - JSON parsing errors
+   - Error messages are displayed to the user with clear diagnostics
+   - Console logging provides additional details for debugging
+
+2. **Server-Side**
+   - The server implements robust error handling:
+     - Invalid JSON format detection
+     - FHIR resource parsing errors
+     - Validation processing errors
+   - All errors are returned as properly formatted FHIR OperationOutcome resources
+   - Detailed logging helps with troubleshooting
+
+### Usage Examples
+
+**Validating a FHIR Resource via API:**
+
+```bash
+curl -X POST http://localhost:5300/api/fhir/$validate \
+  -H "Content-Type: application/fhir+json" \
+  -H "Accept: application/fhir+json" \
+  -d '{"resourceType":"Patient","id":"example","name":[{"family":"Smith","given":["John"]}]}'
+```
+
+**Validating a FHIR Resource via UI:**
+
+1. Navigate to the FHIR Explorer page
+2. Select a resource type (e.g., "Patient") and fetch a resource
+3. Click the "Validate Resource" button below the JSON viewer
+4. View the validation results in the "Validation Results" section
+
 ## Data Flow
 
 1. **Data Source (Azure SQL Database)**
@@ -44,16 +124,20 @@ The Phoenix project implements a flexible data source strategy that allows switc
      - `Gender` → FHIR `AdministrativeGender`
      - `PatientAddress/City/State/Zip` → FHIR `Patient.address`
      - `Phone/Email` → FHIR `Patient.telecom`
+   - The mapper ensures all required FHIR fields are populated with valid values
+   - It includes proper metadata, narrative text, and references to ensure validation passes
 
 4. **FHIR Service Layer**
    - `FhirService` handles serialization, deserialization, and validation of FHIR resources
-   - Ensures the mapped resources conform to the FHIR specification
+   - Ensures the mapped resources conform to the FHIR standard specifications
+   - Provides detailed validation results with severity levels and issue locations
 
 5. **API Layer (RESTful Endpoints)**
    - `FhirController` exposes standardized FHIR endpoints:
      - `GET /api/fhir/Patient/{id}` - Get a single patient
      - `GET /api/fhir/Patient` - Get all patients
      - `GET /api/fhir/metadata` - Get capability statement
+     - `POST /api/fhir/$validate` - Validate a FHIR resource
 
 6. **Response Format**
    - All responses are formatted as standard FHIR JSON (`application/fhir+json`)
@@ -99,6 +183,7 @@ This will open the FHIR Explorer interface where you can:
 3. View individual patients by entering a patient ID (the default is "1001") and clicking "Fetch Resource"
 4. View all patients by leaving the ID field empty and clicking "Fetch Resource"
 5. See a list of available patient IDs in the sidebar
+6. Validate resources by clicking the "Validate Resource" button
 
 The FHIR Explorer automatically loads all patients when the page is first opened, providing an immediate view of the data.
 
@@ -185,6 +270,7 @@ The Phoenix-Azure application includes two main interfaces for viewing patient d
      - Fetches data from the regular API endpoint (`/api/Patient`)
      - Transforms the data into FHIR-compliant format for display
      - Supports capability statements and other FHIR-specific features
+   - Includes validation capabilities to verify FHIR compliance
 
 #### Data Flow Comparison
 
@@ -196,6 +282,11 @@ Client Request → API Server (/api/Patient) → PatientDataService → Azure AP
 **FHIR Explorer Data Flow:**
 ```
 Client Request → API Server (/api/Patient) → PatientDataService → Azure API → SQL Database → Simple JSON Response → Client-side FHIR Transformation → FHIR JSON Display
+```
+
+**FHIR Validation Flow:**
+```
+Client Request → API Server (/api/fhir/$validate) → FhirService.Validate → Firely SDK Validator → OperationOutcome → Client Display
 ```
 
 This hybrid approach ensures that the FHIR Explorer works reliably while still providing the FHIR-compliant view that is essential for healthcare interoperability standards.
@@ -286,6 +377,22 @@ public async Task<IActionResult> GetPatient(int id)
     
     return Content(json, "application/fhir+json");
 }
+
+[HttpPost("$validate")]
+[Produces("application/fhir+json")]
+public async Task<IActionResult> ValidateResource([FromBody] JObject resource)
+{
+    // Parse the resource
+    var fhirResource = _fhirService.ParseResource(resource.ToString());
+    
+    // Validate the resource
+    var validationResult = _fhirService.Validate(fhirResource);
+    
+    // Return the validation result as an OperationOutcome
+    var json = _fhirService.SerializeToJson(validationResult.OperationOutcome);
+    
+    return Content(json, "application/fhir+json");
+}
 ```
 
 ## Testing the API Directly
@@ -301,6 +408,18 @@ curl -X GET "https://apiserviceswin20250318.azurewebsites.net/api/fhir/Patient" 
 
 # Get patient by ID
 curl -X GET "https://apiserviceswin20250318.azurewebsites.net/api/fhir/Patient/1036" -H "accept: application/fhir+json"
+
+# Validate a FHIR resource
+curl -X POST "https://apiserviceswin20250318.azurewebsites.net/api/fhir/$validate" \
+  -H "Content-Type: application/fhir+json" \
+  -d '{
+    "resourceType": "Patient",
+    "id": "1001",
+    "name": [{
+      "family": "Smith",
+      "given": ["John"]
+    }]
+  }'
 ```
 
 ## Troubleshooting
@@ -316,8 +435,14 @@ curl -X GET "https://apiserviceswin20250318.azurewebsites.net/api/fhir/Patient/1
    - Check the network tab in your browser's developer tools to ensure the API requests are successful.
 
 3. **FHIR validation errors**:
-   - Ensure that the mapped FHIR resources conform to the FHIR specification.
-   - Check the FhirService.Validate method for any validation issues.
+   - Check the validation results for specific issues that need to be addressed.
+   - Common validation errors include:
+     - Missing required fields (gender, name, identifier)
+     - Invalid date formats (dates should be in YYYY-MM-DD format)
+     - Invalid references (references should follow the format ResourceType/id)
+     - Invalid coding systems (ensure you're using standard FHIR coding systems)
+   - Review the PatientFhirMapper implementation to ensure all required fields are properly mapped.
+   - Use the FHIR Explorer's validation feature to identify and fix issues.
 
 4. **Network connectivity issues**:
    - Ensure you have a stable internet connection to access the Azure API.
@@ -328,3 +453,4 @@ curl -X GET "https://apiserviceswin20250318.azurewebsites.net/api/fhir/Patient/1
 - [HL7 FHIR Documentation](https://www.hl7.org/fhir/)
 - [Firely .NET SDK Documentation](https://docs.fire.ly/projects/Firely-NET-SDK/en/latest/)
 - [Azure API for FHIR Documentation](https://docs.microsoft.com/en-us/azure/healthcare-apis/fhir/)
+- [FHIR Validation Documentation](https://www.hl7.org/fhir/validation.html)

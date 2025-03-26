@@ -11,6 +11,8 @@ using Phoenix_AzureAPI.Models;
 using DomainPatient = Phoenix_AzureAPI.Models.Patient;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Rest;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Phoenix_AzureAPI.Controllers
 {
@@ -130,7 +132,7 @@ namespace Phoenix_AzureAPI.Controllers
         {
             try
             {
-                // Create a CapabilityStatement
+                // Create a new capability statement
                 var capabilityStatement = new CapabilityStatement
                 {
                     Status = PublicationStatus.Active,
@@ -141,8 +143,8 @@ namespace Phoenix_AzureAPI.Controllers
                         Name = "Phoenix-Azure FHIR API",
                         Version = "1.0.0"
                     },
-                    FhirVersion = Hl7.Fhir.Model.FHIRVersion.N4_0_1,
-                    Format = new[] { "application/fhir+json" },
+                    FhirVersion = FHIRVersion.N4_0_1,
+                    Format = new string[] { "application/fhir+json" },
                     Rest = new List<CapabilityStatement.RestComponent>
                     {
                         new CapabilityStatement.RestComponent
@@ -164,31 +166,126 @@ namespace Phoenix_AzureAPI.Controllers
                                         {
                                             Code = CapabilityStatement.TypeRestfulInteraction.SearchType
                                         }
-                                    },
-                                    SearchParam = new List<CapabilityStatement.SearchParamComponent>
-                                    {
-                                        new CapabilityStatement.SearchParamComponent
-                                        {
-                                            Name = "_id",
-                                            Type = SearchParamType.Token,
-                                            Documentation = "The ID of the resource"
-                                        }
                                     }
+                                }
+                            },
+                            Operation = new List<CapabilityStatement.OperationComponent>
+                            {
+                                new CapabilityStatement.OperationComponent
+                                {
+                                    Name = "validate",
+                                    Definition = "http://hl7.org/fhir/OperationDefinition/Resource-validate"
                                 }
                             }
                         }
                     }
                 };
-                
+
                 // Serialize to JSON
                 var json = _fhirService.SerializeToJson(capabilityStatement);
+                return Content(json, "application/fhir+json");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating capability statement");
+                return StatusCode(500, "Error generating capability statement");
+            }
+        }
+
+        /// <summary>
+        /// Validate a FHIR resource
+        /// </summary>
+        /// <returns>A FHIR OperationOutcome with validation results</returns>
+        [HttpPost("$validate")]
+        [Produces("application/fhir+json")]
+        [Consumes("application/json", "application/fhir+json")]
+        public async Task<IActionResult> ValidateResource()
+        {
+            try
+            {
+                // Read the request body as a string
+                string requestBody;
+                using (var reader = new StreamReader(Request.Body, System.Text.Encoding.UTF8))
+                {
+                    requestBody = await reader.ReadToEndAsync();
+                }
+                
+                if (string.IsNullOrWhiteSpace(requestBody))
+                {
+                    return BadRequest("No resource provided for validation");
+                }
+
+                _logger.LogInformation($"Received request for validation: {requestBody}");
+                
+                // Try to parse the JSON to extract the resource
+                string resourceJson = requestBody;
+                
+                Resource resource;
+                try {
+                    resource = _fhirService.ParseResource(resourceJson);
+                    _logger.LogInformation($"Successfully parsed resource of type: {resource.TypeName}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error parsing FHIR resource for validation");
+                    
+                    // Create an error outcome
+                    var errorOutcome = new OperationOutcome
+                    {
+                        Issue = new List<OperationOutcome.IssueComponent>
+                        {
+                            new OperationOutcome.IssueComponent
+                            {
+                                Severity = OperationOutcome.IssueSeverity.Error,
+                                Code = OperationOutcome.IssueType.Invalid,
+                                Diagnostics = $"Invalid FHIR resource format: {ex.Message}"
+                            }
+                        }
+                    };
+                    
+                    var errorJson = _fhirService.SerializeToJson(errorOutcome);
+                    return BadRequest(errorJson);
+                }
+                
+                if (resource == null)
+                {
+                    return BadRequest("Invalid resource format");
+                }
+                
+                // Validate the resource
+                var validationResult = _fhirService.Validate(resource);
+                
+                // Return the validation outcome
+                var json = _fhirService.SerializeToJson(validationResult.OperationOutcome ?? new OperationOutcome());
+                
+                // Return 422 if validation failed, 200 if successful
+                if (!validationResult.IsValid)
+                {
+                    return StatusCode(422, json);
+                }
                 
                 return Content(json, "application/fhir+json");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting FHIR capability statement");
-                return StatusCode((int)HttpStatusCode.InternalServerError, $"Error: {ex.Message}");
+                _logger.LogError(ex, "Error validating FHIR resource");
+                
+                // Create an error outcome
+                var errorOutcome = new OperationOutcome
+                {
+                    Issue = new List<OperationOutcome.IssueComponent>
+                    {
+                        new OperationOutcome.IssueComponent
+                        {
+                            Severity = OperationOutcome.IssueSeverity.Error,
+                            Code = OperationOutcome.IssueType.Exception,
+                            Diagnostics = $"Validation error: {ex.Message}"
+                        }
+                    }
+                };
+                
+                var errorJson = _fhirService.SerializeToJson(errorOutcome);
+                return StatusCode(500, errorJson);
             }
         }
 

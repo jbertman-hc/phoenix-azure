@@ -20,6 +20,27 @@
         .list-group-item {
             font-size: 0.9rem;
         }
+        .validation-issue {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .validation-error {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+        .validation-warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        .validation-information {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+        }
+        .validation-success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+        }
     </style>
 </head>
 <body>
@@ -38,6 +59,9 @@
                     <li class="nav-item">
                         <a class="nav-link active" href="fhir-explorer.html">FHIR Explorer</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="fhir-demo.html">FHIR Demo</a>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -46,9 +70,9 @@
     <div class="container mt-4">
         <div class="jumbotron bg-light p-5 rounded">
             <h1 class="display-4">FHIR Explorer</h1>
-            <p class="lead">Explore FHIR resources from the Phoenix-Azure API.</p>
+            <p class="lead">Explore and validate FHIR resources from the Phoenix-Azure API.</p>
             <hr class="my-4">
-            <p>This tool allows you to view FHIR resources in their JSON format. Select a resource type and optionally an ID to view specific resources.</p>
+            <p>This tool allows you to view FHIR resources in their JSON format and validate them against standard FHIR profiles. Select a resource type and optionally an ID to view specific resources.</p>
         </div>
 
         <div id="alertContainer" class="mt-3"></div>
@@ -66,35 +90,17 @@
                                 <!-- Options will be populated by JavaScript -->
                             </select>
                         </div>
-                        
                         <div class="mb-3">
                             <label for="resourceId" class="form-label">Resource ID (optional)</label>
-                            <input type="text" class="form-control" id="resourceId" placeholder="Enter ID for specific resource">
+                            <input type="text" class="form-control" id="resourceId" placeholder="Leave empty to fetch all">
                         </div>
-                        
                         <button class="btn btn-primary" id="fetchResource">Fetch Resource</button>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="mb-0">Available Patient IDs</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="patientIdsList">
-                            <div class="text-center my-3">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <p class="mt-2">Loading patient IDs...</p>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
             
             <div class="col-md-8">
-                <div class="card">
+                <div class="card mb-4">
                     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">FHIR Resource Viewer</h5>
                         <button class="btn btn-sm btn-light" id="copyJson" style="display: none;">
@@ -120,8 +126,43 @@
                         </div>
                         
                         <div id="resourceContainer" style="display: none;">
-                            <pre id="resourceJson"></pre>
+                            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 1rem; background-color: #f8f9fa;">
+                                <pre id="resourceJson"></pre>
+                            </div>
                         </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <button class="btn btn-success" id="validateResource" disabled>
+                                    <i class="bi bi-check-circle"></i> Validate Resource
+                                </button>
+                            </div>
+                            <div class="text-muted small">
+                                <i class="bi bi-info-circle"></i> Validation powered by Firely .NET SDK
+                            </div>
+                        </div>
+                        <div class="mt-2 small text-muted">
+                            Validates FHIR resources against standard profiles, checking required fields, data types, and structural constraints.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" id="validationResultCard" style="display: none;">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">Validation Results</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="loadingValidation" class="text-center my-3" style="display: none;">
+                            <div class="spinner-border text-success" role="status">
+                                <span class="visually-hidden">Validating...</span>
+                            </div>
+                            <p class="mt-2">Validating FHIR resource...</p>
+                        </div>
+                        
+                        <div id="validationSummary" class="alert"></div>
+                        
+                        <div id="validationIssues"></div>
                     </div>
                 </div>
             </div>

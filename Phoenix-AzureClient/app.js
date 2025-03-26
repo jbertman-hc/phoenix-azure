@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showPatientList();
         });
     } else {
-        console.error('Back to list button not found');
+        console.warn('Back to list button not found, this may be expected on some pages');
     }
     
     if (patientsLink) {
@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showPatientList();
         });
     } else {
-        console.error('Patients link not found');
+        console.warn('Patients link not found, this may be expected on some pages');
     }
     
     if (searchInput) {

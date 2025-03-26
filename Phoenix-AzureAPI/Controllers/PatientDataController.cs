@@ -70,12 +70,19 @@ namespace Phoenix_AzureAPI.Controllers
                     var repositoriesMap = new Dictionary<string, List<string>>();
                     foreach (var repo in repositories)
                     {
-                        var repoDict = JsonSerializer.Deserialize<Dictionary<string, object>>(repo.ToString(), options);
-                        if (repoDict.TryGetValue("name", out var nameObj) && repoDict.TryGetValue("methods", out var methodsObj))
+                        var repoDict = JsonSerializer.Deserialize<Dictionary<string, object>>(repo.ToString() ?? "{}", options);
+                        if (repoDict != null && repoDict.TryGetValue("name", out var nameObj) && repoDict.TryGetValue("methods", out var methodsObj))
                         {
-                            var name = nameObj.ToString();
-                            var methods = JsonSerializer.Deserialize<List<string>>(methodsObj.ToString(), options);
-                            repositoriesMap[name] = methods;
+                            var name = nameObj?.ToString() ?? string.Empty;
+                            var methodsString = methodsObj?.ToString();
+                            var methods = !string.IsNullOrEmpty(methodsString) 
+                                ? JsonSerializer.Deserialize<List<string>>(methodsString, options) ?? new List<string>()
+                                : new List<string>();
+                            
+                            if (!string.IsNullOrEmpty(name))
+                            {
+                                repositoriesMap[name] = methods;
+                            }
                         }
                     }
                     
