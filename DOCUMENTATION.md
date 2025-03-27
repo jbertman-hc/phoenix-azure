@@ -21,10 +21,12 @@ The Phoenix FHIR API project is focused on creating a standards-compliant FHIR R
    - Added raw JSON view for resource details
    - Implemented resource and bundle validation
    - Added loading indicators for better UX
+   - Integrated third-party HAPI FHIR validation as a fallback
 
 3. **Validation**:
-   - Implemented validation for individual resources
+   - Implemented local validation for individual resources
    - Added bundle validation functionality
+   - Integrated HAPI FHIR Validator as a fallback for redundant validation
    - Ensured proper error handling and user feedback
 
 ### Technical Implementation
@@ -37,7 +39,7 @@ The Phoenix FHIR API project is focused on creating a standards-compliant FHIR R
 2. **FHIR Compliance**:
    - Uses Firely SDK for FHIR R4 implementation
    - Follows US Core Implementation Guide
-   - Validates resources against FHIR standards
+   - Validates resources against FHIR standards using both local and third-party validators
 
 ## Next Steps
 
@@ -70,16 +72,18 @@ Throughout implementation, we will maintain our focus on:
 1. **Using Real Data Sources**: No mock data, only real-time mappings from existing data
 2. **FHIR R4 Compliance**: Following FHIR standards and US Core profiles
 3. **Incremental Implementation**: One resource type at a time, thoroughly tested
-4. **Validation**: Comprehensive validation against FHIR standards
+4. **Validation**: Comprehensive validation against FHIR standards using multiple validation mechanisms
 
 ## Technical Details
 
 - **API URL**: http://localhost:5301/api
 - **Visualizer URL**: http://localhost:8095
 - **Backend Data Source**: Azure SQL Database (https://apiserviceswin20250318.azurewebsites.net/api)
+- **Third-Party Validator**: HAPI FHIR Validator (https://hapi.fhir.org/baseR4/$validate)
 
 ## Recent Changes
 
+- Added third-party HAPI FHIR validation as a fallback for redundant validation
 - Fixed validation functionality in the FHIR Visualizer
 - Improved error handling for validation requests
 - Updated UI to show raw JSON for resource details

@@ -10,7 +10,8 @@ document.addEventListener('DOMContentLoaded', function() {
             dataSource: 'Azure SQL Database',
             dataSourceDescription: 'Legacy healthcare data from AmazingCharts SQL database'
         },
-        currentBundle: null
+        currentBundle: null,
+        hapiValidatorUrl: 'https://hapi.fhir.org/baseR4/$validate'
     };
 
     // DOM elements
@@ -311,6 +312,37 @@ document.addEventListener('DOMContentLoaded', function() {
             return outcome;
         } catch (error) {
             console.error('Error validating bundle/resource:', error);
+            // Fallback to HAPI FHIR Validator
+            return validateBundleWithHapi(bundle);
+        }
+    }
+
+    async function validateBundleWithHapi(bundle) {
+        try {
+            console.log('Validating bundle/resource with HAPI FHIR Validator:', JSON.stringify(bundle, null, 2).substring(0, 200) + '...');
+            
+            const response = await fetch(config.hapiValidatorUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/fhir+json',
+                    'Accept': 'application/fhir+json'
+                },
+                body: JSON.stringify(bundle)
+            });
+
+            console.log('Validation response status:', response.status);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Validation error response:', errorText);
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            }
+
+            const outcome = await response.json();
+            console.log('Validation outcome:', JSON.stringify(outcome, null, 2).substring(0, 200) + '...');
+            return outcome;
+        } catch (error) {
+            console.error('Error validating bundle/resource with HAPI FHIR Validator:', error);
             // Return a default OperationOutcome with the error
             return {
                 resourceType: "OperationOutcome",
