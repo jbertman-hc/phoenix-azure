@@ -24,8 +24,6 @@ const backToListBtn = document.getElementById('backToListBtn');
 const searchInput = document.getElementById('searchInput');
 const clearSearchBtn = document.getElementById('clearSearchBtn');
 const patientsLink = document.getElementById('patientsLink');
-const viewFhirPatientBtn = document.getElementById('viewFhirPatientBtn');
-const viewFhirBundleBtn = document.getElementById('viewFhirBundleBtn');
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
@@ -69,25 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     } else {
         console.error('Clear search button not found');
-    }
-    
-    // Add event listeners for FHIR buttons
-    if (viewFhirPatientBtn) {
-        viewFhirPatientBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (currentPatientId) {
-                viewFhirResource(`${API_BASE_URL}/fhir/Patient/${currentPatientId}`, 'FHIR Patient');
-            }
-        });
-    }
-    
-    if (viewFhirBundleBtn) {
-        viewFhirBundleBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (currentPatientId) {
-                viewFhirResource(`${API_BASE_URL}/fhir/Bundle/Patient/${currentPatientId}`, 'FHIR Bundle');
-            }
-        });
     }
     
     // Add event listeners for table sorting
@@ -267,33 +246,13 @@ async function loadMedicalRecordsAsync(patientId) {
             const collapseId = `collapse${index}`;
             
             let title = recordType;
-            let date = 'Unknown date';
-            let content = '';
-            
-            // Handle different record types differently
-            if (recordType === 'Notes' && recordData.noteSubject) {
+            if (recordData.noteSubject) {
                 title += ` - ${recordData.noteSubject}`;
-                
-                if (recordData.date) {
-                    date = new Date(recordData.date).toLocaleString();
-                }
-                
-                content = `
-                    ${recordData.noteBody ? `<p>${recordData.noteBody.replace(/\r\n/g, '<br>')}</p>` : ''}
-                    ${recordData.savedBy ? `<p class="text-muted">Provider: ${recordData.savedBy}</p>` : ''}
-                `;
-            } else if (recordType === 'Allergies') {
-                // Format allergies data
-                content = formatAllergiesData(recordData);
-            } else if (recordType === 'Medications') {
-                // Format medications data
-                content = formatMedicationsData(recordData);
-            } else if (recordType === 'Problems') {
-                // Format problems data
-                content = formatProblemsData(recordData);
-            } else {
-                // Generic JSON display for other record types
-                content = `<pre>${JSON.stringify(recordData, null, 2)}</pre>`;
+            }
+            
+            let date = 'Unknown date';
+            if (recordData.date) {
+                date = new Date(recordData.date).toLocaleString();
             }
             
             accordionItem.innerHTML = `
@@ -304,7 +263,8 @@ async function loadMedicalRecordsAsync(patientId) {
                 </h2>
                 <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${headerId}" data-bs-parent="#medicalRecordsAccordion">
                     <div class="accordion-body">
-                        ${content}
+                        ${recordData.noteBody ? `<p>${recordData.noteBody.replace(/\r\n/g, '<br>')}</p>` : ''}
+                        ${recordData.savedBy ? `<p class="text-muted">Provider: ${recordData.savedBy}</p>` : ''}
                     </div>
                 </div>
             `;
@@ -534,112 +494,6 @@ function formatAddress(patient) {
     return address || 'Unknown';
 }
 
-function formatAllergiesData(data) {
-    if (!data || Array.isArray(data) && data.length === 0) {
-        return '<p class="text-muted">No allergies recorded</p>';
-    }
-    
-    // If data is an array, format each allergy
-    if (Array.isArray(data)) {
-        let html = '<table class="table table-striped table-sm">';
-        html += '<thead><tr><th>Allergy</th><th>Reaction</th><th>Severity</th><th>Status</th></tr></thead>';
-        html += '<tbody>';
-        
-        data.forEach(allergy => {
-            const allergyName = allergy.allergyName || allergy.substance || 'Unknown';
-            const reaction = allergy.reaction || 'Not specified';
-            const severity = allergy.severity || 'Not specified';
-            const status = allergy.status || 'Active';
-            
-            html += `<tr>
-                <td>${allergyName}</td>
-                <td>${reaction}</td>
-                <td>${severity}</td>
-                <td><span class="badge ${status === 'Active' ? 'bg-danger' : 'bg-secondary'}">${status}</span></td>
-            </tr>`;
-        });
-        
-        html += '</tbody></table>';
-        return html;
-    }
-    
-    // If data is a single object or other format, display as JSON
-    return `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-}
-
-function formatMedicationsData(data) {
-    if (!data || Array.isArray(data) && data.length === 0) {
-        return '<p class="text-muted">No medications recorded</p>';
-    }
-    
-    // If data is an array, format each medication
-    if (Array.isArray(data)) {
-        let html = '<table class="table table-striped table-sm">';
-        html += '<thead><tr><th>Medication</th><th>Dosage</th><th>Frequency</th><th>Status</th></tr></thead>';
-        html += '<tbody>';
-        
-        data.forEach(med => {
-            const medName = med.medicationName || med.name || 'Unknown';
-            const dosage = med.dosage || med.dose || 'Not specified';
-            const frequency = med.frequency || med.schedule || 'Not specified';
-            const status = med.status || 'Active';
-            
-            html += `<tr>
-                <td>${medName}</td>
-                <td>${dosage}</td>
-                <td>${frequency}</td>
-                <td><span class="badge ${status === 'Active' ? 'bg-primary' : 'bg-secondary'}">${status}</span></td>
-            </tr>`;
-        });
-        
-        html += '</tbody></table>';
-        return html;
-    }
-    
-    // If data is a single object or other format, display as JSON
-    return `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-}
-
-function formatProblemsData(data) {
-    if (!data || Array.isArray(data) && data.length === 0) {
-        return '<p class="text-muted">No problems recorded</p>';
-    }
-    
-    // If data is an array, format each problem
-    if (Array.isArray(data)) {
-        let html = '<table class="table table-striped table-sm">';
-        html += '<thead><tr><th>Problem</th><th>Date Identified</th><th>Status</th></tr></thead>';
-        html += '<tbody>';
-        
-        data.forEach(problem => {
-            const problemName = problem.problemName || problem.name || problem.diagnosis || 'Unknown';
-            
-            let dateIdentified = 'Not specified';
-            if (problem.dateIdentified) {
-                try {
-                    dateIdentified = new Date(problem.dateIdentified).toLocaleDateString();
-                } catch (e) {
-                    dateIdentified = problem.dateIdentified;
-                }
-            }
-            
-            const status = problem.status || 'Active';
-            
-            html += `<tr>
-                <td>${problemName}</td>
-                <td>${dateIdentified}</td>
-                <td><span class="badge ${status === 'Active' ? 'bg-warning' : 'bg-secondary'}">${status}</span></td>
-            </tr>`;
-        });
-        
-        html += '</tbody></table>';
-        return html;
-    }
-    
-    // If data is a single object or other format, display as JSON
-    return `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-}
-
 function showAlert(type, message) {
     alertContainer.innerHTML = `
         <div class="alert alert-${type} alert-dismissible fade show" role="alert">
@@ -705,100 +559,4 @@ function debounce(func, wait) {
             func.apply(context, args);
         }, wait);
     };
-}
-
-/**
- * View a FHIR resource in a modal dialog
- * @param {string} url - The URL to fetch the FHIR resource from
- * @param {string} title - The title to display in the modal
- */
-async function viewFhirResource(url, title) {
-    try {
-        // Create modal if it doesn't exist
-        let modal = document.getElementById('fhirResourceModal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.className = 'modal fade';
-            modal.id = 'fhirResourceModal';
-            modal.tabIndex = '-1';
-            modal.setAttribute('aria-labelledby', 'fhirResourceModalLabel');
-            modal.setAttribute('aria-hidden', 'true');
-            
-            modal.innerHTML = `
-                <div class="modal-dialog modal-xl modal-dialog-scrollable">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="fhirResourceModalLabel">${title}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div id="fhirResourceLoading" class="text-center my-5">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <p class="mt-2">Loading FHIR resource...</p>
-                            </div>
-                            <div id="fhirResourceError" class="alert alert-danger" style="display: none;"></div>
-                            <pre id="fhirResourceContent" class="bg-light p-3 rounded" style="display: none; max-height: 70vh; overflow: auto;"></pre>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-        } else {
-            // Update modal title
-            document.getElementById('fhirResourceModalLabel').textContent = title;
-        }
-        
-        // Get modal elements
-        const fhirResourceLoading = document.getElementById('fhirResourceLoading');
-        const fhirResourceError = document.getElementById('fhirResourceError');
-        const fhirResourceContent = document.getElementById('fhirResourceContent');
-        
-        // Show loading, hide error and content
-        fhirResourceLoading.style.display = 'block';
-        fhirResourceError.style.display = 'none';
-        fhirResourceContent.style.display = 'none';
-        
-        // Create Bootstrap modal instance
-        const modalInstance = new bootstrap.Modal(modal);
-        modalInstance.show();
-        
-        // Fetch FHIR resource
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/fhir+json'
-            },
-            mode: 'cors'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-        }
-        
-        const fhirResource = await response.json();
-        
-        // Format JSON with syntax highlighting
-        const formattedJson = JSON.stringify(fhirResource, null, 2);
-        fhirResourceContent.textContent = formattedJson;
-        
-        // Hide loading, show content
-        fhirResourceLoading.style.display = 'none';
-        fhirResourceContent.style.display = 'block';
-    } catch (error) {
-        console.error('Error viewing FHIR resource:', error);
-        
-        // Show error message
-        const fhirResourceLoading = document.getElementById('fhirResourceLoading');
-        const fhirResourceError = document.getElementById('fhirResourceError');
-        
-        fhirResourceLoading.style.display = 'none';
-        fhirResourceError.style.display = 'block';
-        fhirResourceError.textContent = `Error loading FHIR resource: ${error.message}`;
-    }
 }

@@ -81,9 +81,6 @@
                         <a class="nav-link" href="index.html">SQL Explorer</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="fhir-explorer.html">FHIR Explorer</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link active" href="fhir-demo.html">FHIR Demo</a>
                     </li>
                 </ul>
@@ -107,6 +104,9 @@
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="mapping-tab" data-bs-toggle="tab" data-bs-target="#mapping" type="button" role="tab">SQL → FHIR Mapping</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="bundle-tab" data-bs-toggle="tab" data-bs-target="#bundle" type="button" role="tab">Patient Bundle</button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="validation-tab" data-bs-toggle="tab" data-bs-target="#validation" type="button" role="tab">Validation</button>
@@ -234,6 +234,32 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Patient Bundle Tab -->
+            <div class="tab-pane fade" id="bundle" role="tabpanel" aria-labelledby="bundle-tab">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Patient Bundle</h5>
+                        <div>
+                            <button class="btn btn-primary btn-sm" onclick="validateBundle()">
+                                <i class="bi bi-check-circle"></i> Validate Bundle
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm ms-2" onclick="openBundleInfernoValidator()">
+                                <i class="bi bi-box-arrow-up-right"></i> Manual Validation
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="bundle-validation-results" class="mb-3"></div>
+                        <div id="patient-bundle" class="json-viewer">
+                            <div class="text-center py-3">
+                                <div class="loading"></div>
+                                <p class="mt-2">Loading patient bundle...</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -664,6 +690,269 @@
                 `;
             }
         }
+        
+        // Fetch patient bundle
+        async function fetchPatientBundle() {
+            try {
+                document.getElementById('patient-bundle').innerHTML = `
+                    <div class="text-center py-3">
+                        <div class="loading"></div>
+                        <p class="mt-2">Loading patient bundle...</p>
+                    </div>
+                `;
+                
+                const response = await fetch(`${FHIR_API_BASE_URL}/Patient`, {
+                    headers: {
+                        'Accept': 'application/fhir+json'
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('patient-bundle').innerHTML = syntaxHighlight(JSON.stringify(data, null, 2));
+            } catch (error) {
+                console.error('Error fetching patient bundle:', error);
+                document.getElementById('patient-bundle').innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> Failed to load patient bundle. ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Validate the patient bundle
+        async function validateBundle() {
+            try {
+                const bundleJson = document.getElementById('patient-bundle').textContent;
+                const bundleData = JSON.parse(bundleJson);
+                
+                // Prepare the bundle JSON for the validator
+                const bundleJsonForValidator = JSON.stringify(bundleData, null, 2);
+                
+                // Determine the profile to validate against
+                const profileUrl = 'http://hl7.org/fhir/StructureDefinition/Bundle';
+                
+                try {
+                    // Use the Inferno validator API directly
+                    const response = await fetch(`${VALIDATOR_API_URL}/validate?profile=${encodeURIComponent(profileUrl)}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: bundleJsonForValidator
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Validation API returned status ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const validationResult = await response.json();
+                    
+                    // Process and display validation results
+                    displayBundleValidationResults(validationResult);
+                    
+                } catch (validationError) {
+                    console.error('Error calling validation API:', validationError);
+                    
+                    // Fallback to the old method if the API call fails
+                    document.getElementById('bundle-validation-results').innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <strong>Validation API Error:</strong> ${validationError.message}
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Alternative Option:</strong> 
+                            <p>You can manually validate this bundle using the Inferno validator website.</p>
+                            <a href="https://inferno.healthit.gov/validator/" target="_blank" class="btn btn-primary mt-2">
+                                Open Inferno Validator
+                            </a>
+                            <button class="btn btn-secondary mt-2 ms-2" onclick="copyBundleToClipboard()">
+                                Copy Bundle to Clipboard
+                            </button>
+                        </div>
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">FHIR Bundle</h6>
+                            </div>
+                            <div class="card-body">
+                                <pre class="bg-light p-3" style="max-height: 300px; overflow-y: auto;">${bundleJsonForValidator}</pre>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error preparing bundle for validation:', error);
+                document.getElementById('bundle-validation-results').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <strong>Error:</strong> Failed to prepare bundle for validation. ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        // Display bundle validation results from the OperationOutcome resource
+        function displayBundleValidationResults(operationOutcome) {
+            if (!operationOutcome || !operationOutcome.issue || operationOutcome.issue.length === 0) {
+                document.getElementById('bundle-validation-results').innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle-fill"></i>
+                        <strong>Validation Successful!</strong> No issues found with the FHIR bundle.
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Want to double-check?</strong>
+                        <p>You can manually verify this result using the official Inferno validator:</p>
+                        <button class="btn btn-primary mt-2" onclick="openBundleInfernoValidator()">
+                            <i class="bi bi-box-arrow-up-right"></i> Open in Inferno Validator
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Count issues by severity
+            const issueCounts = {
+                error: 0,
+                warning: 0,
+                information: 0,
+                note: 0
+            };
+            
+            operationOutcome.issue.forEach(issue => {
+                if (issue.severity && issueCounts.hasOwnProperty(issue.severity)) {
+                    issueCounts[issue.severity]++;
+                }
+            });
+            
+            // Create summary
+            let summaryHtml = `
+                <div class="alert ${issueCounts.error > 0 ? 'alert-danger' : issueCounts.warning > 0 ? 'alert-warning' : 'alert-success'}">
+                    <i class="bi ${issueCounts.error > 0 ? 'bi-x-circle-fill' : issueCounts.warning > 0 ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill'}"></i>
+                    <strong>Validation Complete:</strong>
+                    <ul class="mb-0 mt-2">
+            `;
+            
+            if (issueCounts.error > 0) {
+                summaryHtml += `<li>${issueCounts.error} error${issueCounts.error !== 1 ? 's' : ''}</li>`;
+            }
+            if (issueCounts.warning > 0) {
+                summaryHtml += `<li>${issueCounts.warning} warning${issueCounts.warning !== 1 ? 's' : ''}</li>`;
+            }
+            if (issueCounts.information > 0) {
+                summaryHtml += `<li>${issueCounts.information} information message${issueCounts.information !== 1 ? 's' : ''}</li>`;
+            }
+            if (issueCounts.note > 0) {
+                summaryHtml += `<li>${issueCounts.note} note${issueCounts.note !== 1 ? 's' : ''}</li>`;
+            }
+            
+            summaryHtml += `
+                    </ul>
+                    <div class="mt-3">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="openBundleInfernoValidator()">
+                            <i class="bi bi-box-arrow-up-right"></i> Verify in Inferno Validator
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Create detailed results
+            let detailsHtml = `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">Validation Issues</h6>
+                    </div>
+                    <div class="card-body">
+            `;
+            
+            // Group issues by severity for better readability
+            const severityOrder = ['error', 'warning', 'information', 'note'];
+            
+            for (const severity of severityOrder) {
+                const severityIssues = operationOutcome.issue.filter(issue => issue.severity === severity);
+                
+                if (severityIssues.length > 0) {
+                    const severityClass = severity === 'error' ? 'danger' : 
+                                         severity === 'warning' ? 'warning' : 
+                                         severity === 'information' ? 'info' : 'secondary';
+                    
+                    detailsHtml += `
+                        <h6 class="text-${severityClass} mt-3 mb-2">
+                            ${severity.charAt(0).toUpperCase() + severity.slice(1)}s (${severityIssues.length})
+                        </h6>
+                    `;
+                    
+                    severityIssues.forEach(issue => {
+                        detailsHtml += `
+                            <div class="validation-issue border-start border-${severityClass} ps-3 mb-3">
+                                <p class="mb-1"><strong>${issue.diagnostics || 'No details provided'}</strong></p>
+                                ${issue.location && issue.location.length > 0 ? 
+                                    `<p class="mb-0 text-muted small">Location: ${issue.location.join(', ')}</p>` : ''}
+                                ${issue.expression && issue.expression.length > 0 ? 
+                                    `<p class="mb-0 text-muted small">Expression: ${issue.expression.join(', ')}</p>` : ''}
+                            </div>
+                        `;
+                    });
+                }
+            }
+            
+            detailsHtml += `
+                    </div>
+                </div>
+            `;
+            
+            // Combine summary and details
+            document.getElementById('bundle-validation-results').innerHTML = summaryHtml + detailsHtml;
+        }
+        
+        // Open the Inferno validator in a new window and copy the bundle to clipboard
+        async function openBundleInfernoValidator() {
+            try {
+                const bundleJson = document.getElementById('patient-bundle').textContent;
+                
+                // Try to copy to clipboard
+                try {
+                    await navigator.clipboard.writeText(bundleJson);
+                    console.log('Bundle copied to clipboard successfully');
+                    showAlert('success', 'Bundle copied to clipboard!');
+                } catch (clipboardError) {
+                    console.error('Failed to copy to clipboard:', clipboardError);
+                    showAlert('warning', 'Could not copy to clipboard. You may need to copy the bundle manually.');
+                }
+                
+                // Open the Inferno validator in a new tab
+                window.open('https://inferno.healthit.gov/validator/', '_blank');
+            } catch (error) {
+                console.error('Error opening validator:', error);
+                showAlert('danger', `Error: ${error.message}`);
+            }
+        }
+        
+        // Helper function to copy bundle to clipboard
+        async function copyBundleToClipboard() {
+            try {
+                const bundleJson = document.getElementById('patient-bundle').textContent;
+                await navigator.clipboard.writeText(bundleJson);
+                
+                // Show success message
+                const alertHtml = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        Bundle copied to clipboard!
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `;
+                
+                // Add alert to the validation results
+                const validationResults = document.getElementById('bundle-validation-results');
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = alertHtml;
+                validationResults.insertBefore(tempDiv.firstChild, validationResults.firstChild);
+            } catch (error) {
+                console.error('Error copying to clipboard:', error);
+                alert('Failed to copy to clipboard: ' + error.message);
+            }
+        }
 
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
@@ -674,6 +963,13 @@
                 // Always fetch the capability statement when the tab is clicked
                 // This ensures we always have the most current server state
                 fetchCapabilityStatement();
+            });
+            
+            // Load patient bundle when tab is clicked
+            document.getElementById('bundle-tab').addEventListener('click', function() {
+                // Always fetch the patient bundle when the tab is clicked
+                // This ensures we always have the most current server state
+                fetchPatientBundle();
             });
         });
         

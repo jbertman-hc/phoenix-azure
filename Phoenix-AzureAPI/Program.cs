@@ -27,7 +27,11 @@ builder.Services.AddScoped<PatientDataService>();
 // Register FHIR services
 builder.Services.AddScoped<IFhirService, FhirService>();
 builder.Services.AddScoped<IPatientFhirMapper, PatientFhirMapper>();
+builder.Services.AddScoped<IPracticeFhirMapper, PracticeFhirMapper>();
 builder.Services.AddScoped<PatientController>();
+
+// Register Practice service
+builder.Services.AddScoped<IPracticeService, PracticeService>();
 
 // Add CORS policy
 builder.Services.AddCors(options =>
@@ -36,7 +40,8 @@ builder.Services.AddCors(options =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .WithExposedHeaders("Content-Disposition");
     });
 });
 

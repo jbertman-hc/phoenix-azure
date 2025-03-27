@@ -66,28 +66,8 @@ namespace Phoenix_AzureAPI.Controllers
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, $"Error retrieving patient with ID {id} using standard method, trying alternative lookup");
-                    
-                    // If we couldn't get the patient with the standard method, try direct lookup
-                    // This helps when there are ID mismatches between data sources
-                    var patientIds = new List<int> { 1001, 1004, 1009, 1022, 1033, 1051, 1059, 1060, 1101, 1107 };
-                    if (patientIds.Contains(id.Value))
-                    {
-                        // Create a simplified patient with the ID
-                        patient = new DomainPatient
-                        {
-                            PatientID = id.Value,
-                            First = $"Patient",
-                            Last = $"{id.Value}",
-                            BirthDate = DateTime.UtcNow.AddYears(-40)
-                        };
-                        _logger.LogInformation($"Created simplified patient with ID {id}");
-                    }
-                    else
-                    {
-                        _logger.LogWarning($"Patient ID {id} not in known list of valid IDs");
-                        throw new Exception($"Patient with ID {id} not found");
-                    }
+                    _logger.LogWarning(ex, $"Error retrieving patient with ID {id}");
+                    return NotFound($"Patient with ID {id} not found");
                 }
                 
                 // Map to FHIR Patient
@@ -447,6 +427,491 @@ namespace Phoenix_AzureAPI.Controllers
                 _logger.LogError(ex, "Error getting all patient IDs");
                 return StatusCode((int)HttpStatusCode.InternalServerError, $"Error: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Get a complete FHIR Bundle containing all resources for a patient
+        /// </summary>
+        /// <param name="id">The patient ID</param>
+        /// <returns>A FHIR Bundle containing the Patient resource and all related resources</returns>
+        [HttpGet("Bundle/Patient/{id}")]
+        [Produces("application/fhir+json")]
+        public async Task<IActionResult> GetPatientBundle(int id)
+        {
+            try
+            {
+                _logger.LogInformation($"Getting complete FHIR Bundle for Patient with ID {id}");
+                
+                // Get the patient from the database
+                DomainPatient patient = null;
+                try
+                {
+                    patient = await GetPatientFromDatabase(id);
+                    _logger.LogInformation($"Successfully retrieved patient with ID {id} from database");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Error retrieving patient with ID {id}");
+                    return NotFound($"Patient with ID {id} not found");
+                }
+                
+                // Create a new FHIR Bundle
+                var bundle = new Bundle
+                {
+                    Type = Bundle.BundleType.Collection,
+                    Id = Guid.NewGuid().ToString(),
+                    Meta = new Meta
+                    {
+                        LastUpdated = DateTime.UtcNow
+                    },
+                    Timestamp = DateTime.UtcNow
+                };
+                
+                // Add the Patient resource to the bundle
+                var fhirPatient = _patientMapper.MapToFhir(patient);
+                bundle.Entry.Add(new Bundle.EntryComponent
+                {
+                    FullUrl = $"urn:uuid:{Guid.NewGuid()}",
+                    Resource = fhirPatient
+                });
+                
+                // Get all medical records for the patient
+                var medicalRecords = await GetPatientMedicalRecords(id);
+                
+                // Add each medical record as a resource to the bundle
+                if (medicalRecords != null)
+                {
+                    // Add allergies as AllergyIntolerance resources
+                    var allergies = medicalRecords.FirstOrDefault(r => r.Type == "Allergies")?.Data;
+                    if (allergies != null)
+                    {
+                        await AddAllergiesToBundle(bundle, allergies, id);
+                    }
+                    
+                    // Add medications as MedicationStatement resources
+                    var medications = medicalRecords.FirstOrDefault(r => r.Type == "Medications")?.Data;
+                    if (medications != null)
+                    {
+                        await AddMedicationsToBundle(bundle, medications, id);
+                    }
+                    
+                    // Add problems as Condition resources
+                    var problems = medicalRecords.FirstOrDefault(r => r.Type == "Problems")?.Data;
+                    if (problems != null)
+                    {
+                        await AddProblemsToBundle(bundle, problems, id);
+                    }
+                    
+                    // Add notes as DocumentReference resources
+                    var notes = medicalRecords.FirstOrDefault(r => r.Type == "Notes")?.Data;
+                    if (notes != null)
+                    {
+                        await AddNotesToBundle(bundle, notes, id);
+                    }
+                }
+                
+                // Serialize to JSON
+                var json = _fhirService.SerializeToJson(bundle);
+                
+                return Content(json, "application/fhir+json");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting FHIR Bundle for patient with ID {id}");
+                return StatusCode(500, $"Error retrieving FHIR Bundle for patient with ID {id}: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Get all medical records for a patient
+        /// </summary>
+        private async Task<List<MedicalRecordData>> GetPatientMedicalRecords(int patientId)
+        {
+            try
+            {
+                // Use the PatientController to get medical records
+                var patientController = new PatientController(
+                    _logger,
+                    HttpContext.RequestServices.GetService(typeof(IHttpClientFactory)) as IHttpClientFactory);
+                
+                var result = await patientController.GetPatientMedicalRecords(patientId);
+                
+                if (result.Result is OkObjectResult okResult)
+                {
+                    return okResult.Value as List<MedicalRecordData>;
+                }
+                
+                return new List<MedicalRecordData>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting medical records for patient {patientId}");
+                return new List<MedicalRecordData>();
+            }
+        }
+        
+        /// <summary>
+        /// Add allergies to the FHIR Bundle as AllergyIntolerance resources
+        /// </summary>
+        private async Task AddAllergiesToBundle(Bundle bundle, object allergiesData, int patientId)
+        {
+            try
+            {
+                // Convert allergies data to a list of objects
+                var allergies = ConvertToList(allergiesData);
+                
+                foreach (var allergyObj in allergies)
+                {
+                    // Create a new AllergyIntolerance resource
+                    var allergy = new AllergyIntolerance
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Meta = new Meta
+                        {
+                            LastUpdated = DateTime.UtcNow
+                        },
+                        Patient = new ResourceReference($"Patient/{patientId}"),
+                        RecordedDate = DateTime.UtcNow
+                    };
+                    
+                    // Extract allergy properties using dynamic object
+                    dynamic allergyDynamic = JObject.FromObject(allergyObj);
+                    
+                    // Set the allergy code
+                    try
+                    {
+                        string allergyName = allergyDynamic.allergyName ?? allergyDynamic.substance ?? "Unknown";
+                        allergy.Code = new CodeableConcept
+                        {
+                            Text = allergyName
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Set the allergy reaction
+                    try
+                    {
+                        string reaction = allergyDynamic.reaction ?? "Not specified";
+                        allergy.Reaction = new List<AllergyIntolerance.ReactionComponent>
+                        {
+                            new AllergyIntolerance.ReactionComponent
+                            {
+                                Description = reaction
+                            }
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Set the allergy status
+                    try
+                    {
+                        string status = allergyDynamic.status ?? "active";
+                        allergy.ClinicalStatus = new CodeableConcept
+                        {
+                            Coding = new List<Coding>
+                            {
+                                new Coding
+                                {
+                                    System = "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                                    Code = status.ToLower() == "active" ? "active" : "inactive",
+                                    Display = status.ToLower() == "active" ? "Active" : "Inactive"
+                                }
+                            }
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Add the allergy to the bundle
+                    bundle.Entry.Add(new Bundle.EntryComponent
+                    {
+                        FullUrl = $"urn:uuid:{allergy.Id}",
+                        Resource = allergy
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding allergies to FHIR Bundle");
+            }
+        }
+        
+        /// <summary>
+        /// Add medications to the FHIR Bundle as MedicationStatement resources
+        /// </summary>
+        private async Task AddMedicationsToBundle(Bundle bundle, object medicationsData, int patientId)
+        {
+            try
+            {
+                // Convert medications data to a list of objects
+                var medications = ConvertToList(medicationsData);
+                
+                foreach (var medicationObj in medications)
+                {
+                    // Create a new MedicationStatement resource
+                    var medicationStatement = new MedicationStatement
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Meta = new Meta
+                        {
+                            LastUpdated = DateTime.UtcNow
+                        },
+                        Subject = new ResourceReference($"Patient/{patientId}"),
+                        DateAsserted = DateTime.UtcNow
+                    };
+                    
+                    // Extract medication properties using dynamic object
+                    dynamic medicationDynamic = JObject.FromObject(medicationObj);
+                    
+                    // Set the medication code
+                    try
+                    {
+                        string medicationName = medicationDynamic.medicationName ?? medicationDynamic.name ?? "Unknown";
+                        medicationStatement.Medication = new CodeableConcept
+                        {
+                            Text = medicationName
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Set the dosage
+                    try
+                    {
+                        string dosage = medicationDynamic.dosage ?? medicationDynamic.dose ?? "Not specified";
+                        string frequency = medicationDynamic.frequency ?? medicationDynamic.schedule ?? "Not specified";
+                        
+                        medicationStatement.DosageInstruction = new List<Dosage>
+                        {
+                            new Dosage
+                            {
+                                Text = $"{dosage}, {frequency}"
+                            }
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Set the status
+                    try
+                    {
+                        string status = medicationDynamic.status ?? "active";
+                        medicationStatement.Status = status.ToLower() == "active" 
+                            ? MedicationStatement.MedicationStatementStatus.Active 
+                            : MedicationStatement.MedicationStatementStatus.Inactive;
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Add the medication to the bundle
+                    bundle.Entry.Add(new Bundle.EntryComponent
+                    {
+                        FullUrl = $"urn:uuid:{medicationStatement.Id}",
+                        Resource = medicationStatement
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding medications to FHIR Bundle");
+            }
+        }
+        
+        /// <summary>
+        /// Add problems to the FHIR Bundle as Condition resources
+        /// </summary>
+        private async Task AddProblemsToBundle(Bundle bundle, object problemsData, int patientId)
+        {
+            try
+            {
+                // Convert problems data to a list of objects
+                var problems = ConvertToList(problemsData);
+                
+                foreach (var problemObj in problems)
+                {
+                    // Create a new Condition resource
+                    var condition = new Condition
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Meta = new Meta
+                        {
+                            LastUpdated = DateTime.UtcNow
+                        },
+                        Subject = new ResourceReference($"Patient/{patientId}"),
+                        RecordedDate = DateTime.UtcNow
+                    };
+                    
+                    // Extract problem properties using dynamic object
+                    dynamic problemDynamic = JObject.FromObject(problemObj);
+                    
+                    // Set the problem code
+                    try
+                    {
+                        string problemName = problemDynamic.problemName ?? problemDynamic.name ?? problemDynamic.diagnosis ?? "Unknown";
+                        condition.Code = new CodeableConcept
+                        {
+                            Text = problemName
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Set the onset date
+                    try
+                    {
+                        if (problemDynamic.dateIdentified != null)
+                        {
+                            string dateStr = problemDynamic.dateIdentified.ToString();
+                            if (DateTime.TryParse(dateStr, out DateTime date))
+                            {
+                                condition.OnsetDateTime = date;
+                            }
+                        }
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Set the status
+                    try
+                    {
+                        string status = problemDynamic.status ?? "active";
+                        condition.ClinicalStatus = new CodeableConcept
+                        {
+                            Coding = new List<Coding>
+                            {
+                                new Coding
+                                {
+                                    System = "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                                    Code = status.ToLower() == "active" ? "active" : "inactive",
+                                    Display = status.ToLower() == "active" ? "Active" : "Inactive"
+                                }
+                            }
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Add the problem to the bundle
+                    bundle.Entry.Add(new Bundle.EntryComponent
+                    {
+                        FullUrl = $"urn:uuid:{condition.Id}",
+                        Resource = condition
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding problems to FHIR Bundle");
+            }
+        }
+        
+        /// <summary>
+        /// Add notes to the FHIR Bundle as DocumentReference resources
+        /// </summary>
+        private async Task AddNotesToBundle(Bundle bundle, object notesData, int patientId)
+        {
+            try
+            {
+                // Convert notes data to a list of objects
+                var notes = ConvertToList(notesData);
+                
+                foreach (var noteObj in notes)
+                {
+                    // Create a new DocumentReference resource
+                    var documentReference = new DocumentReference
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Meta = new Meta
+                        {
+                            LastUpdated = DateTime.UtcNow
+                        },
+                        Subject = new ResourceReference($"Patient/{patientId}"),
+                        Date = DateTime.UtcNow
+                    };
+                    
+                    // Extract note properties using dynamic object
+                    dynamic noteDynamic = JObject.FromObject(noteObj);
+                    
+                    // Set the note type
+                    try
+                    {
+                        string noteSubject = noteDynamic.noteSubject ?? "Clinical Note";
+                        documentReference.Type = new CodeableConcept
+                        {
+                            Text = noteSubject
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Set the note content
+                    try
+                    {
+                        string noteBody = noteDynamic.noteBody ?? "";
+                        documentReference.Content = new List<DocumentReference.ContentComponent>
+                        {
+                            new DocumentReference.ContentComponent
+                            {
+                                Attachment = new Attachment
+                                {
+                                    ContentType = "text/plain",
+                                    Data = System.Text.Encoding.UTF8.GetBytes(noteBody)
+                                }
+                            }
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Set the author
+                    try
+                    {
+                        string savedBy = noteDynamic.savedBy ?? "Unknown";
+                        documentReference.Author = new List<ResourceReference>
+                        {
+                            new ResourceReference
+                            {
+                                Display = savedBy
+                            }
+                        };
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Set the date
+                    try
+                    {
+                        if (noteDynamic.date != null)
+                        {
+                            string dateStr = noteDynamic.date.ToString();
+                            if (DateTime.TryParse(dateStr, out DateTime date))
+                            {
+                                documentReference.Date = date;
+                            }
+                        }
+                    }
+                    catch { /* Ignore if property doesn't exist */ }
+                    
+                    // Add the note to the bundle
+                    bundle.Entry.Add(new Bundle.EntryComponent
+                    {
+                        FullUrl = $"urn:uuid:{documentReference.Id}",
+                        Resource = documentReference
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding notes to FHIR Bundle");
+            }
+        }
+        
+        /// <summary>
+        /// Helper method to convert an object to a list of objects
+        /// </summary>
+        private List<object> ConvertToList(object data)
+        {
+            if (data == null)
+                return new List<object>();
+                
+            if (data is IEnumerable<object> enumerable)
+                return enumerable.ToList();
+                
+            if (data is JArray jArray)
+                return jArray.ToObject<List<object>>();
+                
+            // If it's a single object, wrap it in a list
+            return new List<object> { data };
         }
 
         // Helper methods to get patient data

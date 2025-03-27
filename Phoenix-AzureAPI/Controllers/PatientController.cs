@@ -31,102 +31,298 @@ namespace Phoenix_AzureAPI.Controllers
         {
             try
             {
-                _logger.LogInformation("Getting all patients");
+                _logger.LogInformation("Getting all patients from PatientIndex");
                 var httpClient = _httpClientFactory.CreateClient();
-                var patients = new List<Patient>();
+                var patients = new Dictionary<int, Patient>();
                 
-                // Since we know the addendum endpoint works from the README example,
-                // let's try to get patient data from addendums for IDs 1-50
-                for (int i = 1; i <= 25; i++)
+                // We'll use the PatientIndex endpoint to get a list of patients
+                // This endpoint might return a list of patient IDs that we can use to fetch details
+                var patientIndexUrl = $"{ApiBaseUrl}PatientIndex";
+                _logger.LogInformation($"Fetching patient index: {patientIndexUrl}");
+                
+                try
                 {
-                    try
+                    var patientIndexResponse = await httpClient.GetAsync(patientIndexUrl);
+                    
+                    if (patientIndexResponse.IsSuccessStatusCode)
                     {
-                        var addendumUrl = $"{ApiBaseUrl}addendum/{i}";
-                        _logger.LogInformation($"Fetching addendum from {addendumUrl}");
+                        var jsonString = await patientIndexResponse.Content.ReadAsStringAsync();
+                        _logger.LogInformation($"Patient index response received");
                         
-                        var addendumResponse = await httpClient.GetAsync(addendumUrl);
-                        
-                        if (addendumResponse.IsSuccessStatusCode)
+                        try
                         {
-                            var jsonString = await addendumResponse.Content.ReadAsStringAsync();
-                            _logger.LogInformation($"Addendum response: {jsonString}");
-                            
-                            // Parse the JSON to extract patient information
                             using (JsonDocument doc = JsonDocument.Parse(jsonString))
                             {
-                                if (doc.RootElement.TryGetProperty("patID", out JsonElement patIdElement) &&
-                                    doc.RootElement.TryGetProperty("patientName", out JsonElement patientNameElement))
+                                // Process the patient index response
+                                // The exact structure depends on the API response format
+                                if (doc.RootElement.ValueKind == JsonValueKind.Array)
                                 {
-                                    int patId = patIdElement.GetInt32();
-                                    string patientName = patientNameElement.GetString() ?? "Unknown";
-                                    
-                                    // Check if we already have this patient
-                                    if (!patients.Any(p => p.PatientID == patId))
+                                    foreach (var patientElement in doc.RootElement.EnumerateArray())
                                     {
-                                        var patient = new Patient { PatientID = patId };
-                                        
-                                        // Parse the patient name
-                                        string[] nameParts = patientName.Split(' ');
-                                        if (nameParts.Length > 0)
+                                        try
                                         {
-                                            patient.First = nameParts[0];
-                                            if (nameParts.Length > 1)
+                                            // Extract patient ID from the index
+                                            if (patientElement.TryGetProperty("patID", out JsonElement patIdElement) &&
+                                                patIdElement.ValueKind == JsonValueKind.Number)
                                             {
-                                                patient.Last = string.Join(" ", nameParts.Skip(1));
+                                                int patientId = patIdElement.GetInt32();
+                                                
+                                                // Skip if we already have this patient
+                                                if (patients.ContainsKey(patientId))
+                                                {
+                                                    continue;
+                                                }
+                                                
+                                                // Fetch patient demographics
+                                                await FetchPatientDemographics(httpClient, patientId, patients);
                                             }
                                         }
-                                        
-                                        // Try to extract DOB if present
-                                        if (patientName.Contains("DOB:"))
+                                        catch (Exception ex)
                                         {
-                                            var dobMatch = Regex.Match(patientName, @"DOB:\s*(\d{1,2}/\d{1,2}/\d{4})");
-                                            if (dobMatch.Success && DateTime.TryParse(dobMatch.Groups[1].Value, out DateTime dob))
-                                            {
-                                                patient.BirthDate = dob;
-                                            }
+                                            _logger.LogWarning(ex, "Error processing patient index element");
                                         }
-                                        
-                                        patients.Add(patient);
-                                        _logger.LogInformation($"Added patient: {patientName} (ID: {patId})");
                                     }
                                 }
                             }
                         }
-                        else
+                        catch (JsonException ex)
                         {
-                            _logger.LogWarning($"Failed to retrieve addendum {i}. Status code: {addendumResponse.StatusCode}");
+                            _logger.LogWarning(ex, "Error parsing patient index JSON");
                         }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        _logger.LogWarning(ex, $"Error processing addendum {i}, skipping");
+                        _logger.LogWarning($"Failed to retrieve patient index. Status code: {patientIndexResponse.StatusCode}");
                     }
                 }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error getting patient index");
+                }
                 
-                _logger.LogInformation($"Retrieved {patients.Count} patients");
+                // If we couldn't get any patients from PatientIndex, try using addendum records
+                if (patients.Count == 0)
+                {
+                    _logger.LogInformation("No patients found from PatientIndex, trying addendum records");
+                    await GetPatientsFromAddendum(httpClient, patients);
+                }
                 
                 if (patients.Count == 0)
                 {
-                    _logger.LogWarning("No patients found from addendum endpoint");
-                    
-                    // Add a sample patient for testing if no patients were found
-                    patients.Add(new Patient
-                    {
-                        PatientID = 1001,
-                        First = "John",
-                        Last = "Doe",
-                        BirthDate = new DateTime(1980, 1, 1)
-                    });
-                    
-                    _logger.LogInformation("Added sample patient for testing");
+                    _logger.LogWarning("No patients found from any API endpoints");
                 }
                 
-                return Ok(patients);
+                _logger.LogInformation($"Returning {patients.Count} patients");
+                return Ok(patients.Values);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting all patients");
                 return StatusCode(500, "Error retrieving patients");
+            }
+        }
+        
+        private async Task FetchPatientDemographics(HttpClient httpClient, int patientId, Dictionary<int, Patient> patients)
+        {
+            try
+            {
+                var demographicsUrl = $"{ApiBaseUrl}Demographics/{patientId}";
+                _logger.LogInformation($"Fetching demographics for patient {patientId}: {demographicsUrl}");
+                
+                var demographicsResponse = await httpClient.GetAsync(demographicsUrl);
+                
+                if (demographicsResponse.IsSuccessStatusCode)
+                {
+                    var jsonString = await demographicsResponse.Content.ReadAsStringAsync();
+                    
+                    if (string.IsNullOrWhiteSpace(jsonString) || jsonString == "{}")
+                    {
+                        _logger.LogWarning($"Empty demographics response for patient {patientId}");
+                        return;
+                    }
+                    
+                    _logger.LogInformation($"Demographics response received for patient {patientId}");
+                    
+                    try
+                    {
+                        using (JsonDocument doc = JsonDocument.Parse(jsonString))
+                        {
+                            var patient = new Patient { PatientID = patientId };
+                            
+                            // Extract first name
+                            if (doc.RootElement.TryGetProperty("firstName", out JsonElement firstNameElement) &&
+                                firstNameElement.ValueKind == JsonValueKind.String)
+                            {
+                                patient.First = firstNameElement.GetString();
+                            }
+                            
+                            // Extract last name
+                            if (doc.RootElement.TryGetProperty("lastName", out JsonElement lastNameElement) &&
+                                lastNameElement.ValueKind == JsonValueKind.String)
+                            {
+                                patient.Last = lastNameElement.GetString();
+                            }
+                            
+                            // Extract gender
+                            if (doc.RootElement.TryGetProperty("gender", out JsonElement genderElement) &&
+                                genderElement.ValueKind == JsonValueKind.String)
+                            {
+                                patient.Gender = genderElement.GetString();
+                            }
+                            
+                            // Extract birth date
+                            if (doc.RootElement.TryGetProperty("dob", out JsonElement dobElement) &&
+                                dobElement.ValueKind == JsonValueKind.String)
+                            {
+                                if (DateTime.TryParse(dobElement.GetString(), out DateTime birthDate))
+                                {
+                                    patient.BirthDate = birthDate;
+                                }
+                            }
+                            
+                            // Extract address
+                            if (doc.RootElement.TryGetProperty("address", out JsonElement addressElement) &&
+                                addressElement.ValueKind == JsonValueKind.String)
+                            {
+                                patient.PatientAddress = addressElement.GetString();
+                            }
+                            
+                            // Extract city
+                            if (doc.RootElement.TryGetProperty("city", out JsonElement cityElement) &&
+                                cityElement.ValueKind == JsonValueKind.String)
+                            {
+                                patient.City = cityElement.GetString();
+                            }
+                            
+                            // Extract state
+                            if (doc.RootElement.TryGetProperty("state", out JsonElement stateElement) &&
+                                stateElement.ValueKind == JsonValueKind.String)
+                            {
+                                patient.State = stateElement.GetString();
+                            }
+                            
+                            // Extract zip
+                            if (doc.RootElement.TryGetProperty("zip", out JsonElement zipElement) &&
+                                zipElement.ValueKind == JsonValueKind.String)
+                            {
+                                patient.Zip = zipElement.GetString();
+                            }
+                            
+                            // Extract phone
+                            if (doc.RootElement.TryGetProperty("phone", out JsonElement phoneElement) &&
+                                phoneElement.ValueKind == JsonValueKind.String)
+                            {
+                                patient.Phone = phoneElement.GetString();
+                            }
+                            
+                            // Extract email
+                            if (doc.RootElement.TryGetProperty("email", out JsonElement emailElement) &&
+                                emailElement.ValueKind == JsonValueKind.String)
+                            {
+                                patient.Email = emailElement.GetString();
+                            }
+                            
+                            // Only add the patient if we have a valid ID and at least a name
+                            if (patient.PatientID > 0 && (!string.IsNullOrWhiteSpace(patient.First) || !string.IsNullOrWhiteSpace(patient.Last)))
+                            {
+                                patients[patientId] = patient;
+                                _logger.LogInformation($"Added patient from demographics: ID={patient.PatientID}, Name={patient.First} {patient.Last}");
+                            }
+                        }
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogWarning(ex, $"Error parsing demographics JSON for patient {patientId}");
+                    }
+                }
+                else if (demographicsResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogWarning($"Demographics not found for patient {patientId}");
+                }
+                else
+                {
+                    _logger.LogWarning($"Failed to retrieve demographics for patient {patientId}. Status code: {demographicsResponse.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, $"Error getting demographics for patient {patientId}");
+            }
+        }
+        
+        private async Task GetPatientsFromAddendum(HttpClient httpClient, Dictionary<int, Patient> patients)
+        {
+            // Fetch patient information from addendum records
+            // We'll check the first 20 addendum records to find unique patients
+            for (int i = 1; i <= 20; i++)
+            {
+                try
+                {
+                    var addendumUrl = $"{ApiBaseUrl}addendum/{i}";
+                    _logger.LogInformation($"Fetching addendum {i}: {addendumUrl}");
+                    
+                    var addendumResponse = await httpClient.GetAsync(addendumUrl);
+                    
+                    if (addendumResponse.IsSuccessStatusCode)
+                    {
+                        var jsonString = await addendumResponse.Content.ReadAsStringAsync();
+                        _logger.LogInformation($"Addendum {i} response received");
+                        
+                        try
+                        {
+                            using (JsonDocument doc = JsonDocument.Parse(jsonString))
+                            {
+                                if (doc.RootElement.TryGetProperty("patID", out JsonElement patIdElement) &&
+                                    patIdElement.ValueKind == JsonValueKind.Number)
+                                {
+                                    int patientId = patIdElement.GetInt32();
+                                    
+                                    // Skip if we already have this patient
+                                    if (patients.ContainsKey(patientId))
+                                    {
+                                        _logger.LogInformation($"Patient {patientId} already in list, skipping");
+                                        continue;
+                                    }
+                                    
+                                    // Create a new patient
+                                    var patient = new Patient { PatientID = patientId };
+                                    
+                                    // Extract patient name and DOB from the patientName field
+                                    if (doc.RootElement.TryGetProperty("patientName", out JsonElement nameElement) &&
+                                        nameElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        string fullNameWithDob = nameElement.GetString() ?? "";
+                                        
+                                        if (!string.IsNullOrWhiteSpace(fullNameWithDob))
+                                        {
+                                            // Parse patient name (format: "LASTNAME, FIRSTNAME (DOB: MM/DD/YYYY)")
+                                            ParsePatientNameFromAddendum(fullNameWithDob, patient);
+                                        }
+                                    }
+                                    
+                                    // Only add the patient if we have a valid ID
+                                    if (patient.PatientID > 0)
+                                    {
+                                        patients[patientId] = patient;
+                                        _logger.LogInformation($"Added patient from addendum {i}: ID={patient.PatientID}, Name={patient.First} {patient.Last}");
+                                    }
+                                }
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogWarning(ex, $"Error parsing addendum {i} JSON");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Failed to retrieve addendum {i}. Status code: {addendumResponse.StatusCode}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Error getting addendum {i}");
+                }
             }
         }
 
@@ -135,97 +331,15 @@ namespace Phoenix_AzureAPI.Controllers
         {
             try
             {
+                _logger.LogInformation($"Getting patient with ID: {id}");
                 var httpClient = _httpClientFactory.CreateClient();
                 var patient = new Patient { PatientID = id };
                 bool patientFound = false;
                 
-                // Try to get patient info from addendum
-                var addendumUrl = $"{ApiBaseUrl}addendum/{id}";
-                _logger.LogInformation($"Fetching patient from addendum: {addendumUrl}");
-                var addendumResponse = await httpClient.GetAsync(addendumUrl);
-                
-                if (addendumResponse.IsSuccessStatusCode)
-                {
-                    var jsonString = await addendumResponse.Content.ReadAsStringAsync();
-                    _logger.LogInformation($"Patient addendum response: {jsonString}");
-                    
-                    if (!string.IsNullOrWhiteSpace(jsonString) && jsonString != "{}")
-                    {
-                        try
-                        {
-                            using (JsonDocument doc = JsonDocument.Parse(jsonString))
-                            {
-                                // Check if patientName property exists and is not null
-                                if (doc.RootElement.TryGetProperty("patientName", out JsonElement patientNameElement) &&
-                                    patientNameElement.ValueKind != JsonValueKind.Null)
-                                {
-                                    string patientName = patientNameElement.GetString() ?? "";
-                                    if (!string.IsNullOrWhiteSpace(patientName))
-                                    {
-                                        ParsePatientNameFromString(patientName, patient);
-                                        patientFound = true;
-                                        
-                                        // Try to extract DOB if present
-                                        if (patientName.Contains("DOB:"))
-                                        {
-                                            var dobMatch = Regex.Match(patientName, @"DOB:\s*(\d{1,2}/\d{1,2}/\d{4})");
-                                            if (dobMatch.Success && DateTime.TryParse(dobMatch.Groups[1].Value, out DateTime dob))
-                                            {
-                                                patient.BirthDate = dob;
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                // Add additional information from the addendum
-                                if (doc.RootElement.TryGetProperty("date", out JsonElement dateElement) && 
-                                    dateElement.ValueKind != JsonValueKind.Null)
-                                {
-                                    DateTime date;
-                                    if (dateElement.TryGetDateTime(out date) && date != default)
-                                    {
-                                        patient.LastVisit = date;
-                                    }
-                                }
-                                
-                                if (doc.RootElement.TryGetProperty("savedBy", out JsonElement savedByElement) && 
-                                    savedByElement.ValueKind != JsonValueKind.String &&
-                                    !string.IsNullOrWhiteSpace(savedByElement.GetString()))
-                                {
-                                    patient.PrimaryCareProvider = savedByElement.GetString();
-                                }
-                            }
-                        }
-                        catch (JsonException ex)
-                        {
-                            _logger.LogWarning(ex, $"Error parsing addendum JSON for patient {id}");
-                        }
-                    }
-                }
-                
-                // If we didn't find the patient in the addendum, try to find it in the patient list
-                if (!patientFound)
-                {
-                    _logger.LogInformation($"Patient {id} not found in addendum, trying to find in patient list");
-                    var allPatients = await GetAllPatients();
-                    
-                    if (allPatients.Result is OkObjectResult okResult && 
-                        okResult.Value is IEnumerable<Patient> patients)
-                    {
-                        var foundPatient = patients.FirstOrDefault(p => p.PatientID == id);
-                        if (foundPatient != null)
-                        {
-                            patient = foundPatient;
-                            patientFound = true;
-                            _logger.LogInformation($"Found patient {id} in patient list");
-                        }
-                    }
-                }
-                
-                // Try to get more patient info from the demographics endpoint
+                // Try to get patient info from demographics endpoint directly
                 try
                 {
-                    var demographicsUrl = $"{ApiBaseUrl}demographics/{id}";
+                    var demographicsUrl = $"{ApiBaseUrl}Demographics/{id}";
                     _logger.LogInformation($"Fetching patient demographics: {demographicsUrl}");
                     var demographicsResponse = await httpClient.GetAsync(demographicsUrl);
                     
@@ -240,46 +354,73 @@ namespace Phoenix_AzureAPI.Controllers
                             {
                                 using (JsonDocument demoDoc = JsonDocument.Parse(demographicsJson))
                                 {
-                                    if (demoDoc.RootElement.ValueKind == JsonValueKind.Object)
+                                    // Extract patient name
+                                    if (demoDoc.RootElement.TryGetProperty("firstName", out JsonElement firstNameElement) &&
+                                        firstNameElement.ValueKind == JsonValueKind.String)
                                     {
-                                        // Extract gender
-                                        if (demoDoc.RootElement.TryGetProperty("gender", out JsonElement genderElement) &&
-                                            genderElement.ValueKind == JsonValueKind.String)
+                                        patient.First = firstNameElement.GetString();
+                                    }
+                                    
+                                    if (demoDoc.RootElement.TryGetProperty("lastName", out JsonElement lastNameElement) &&
+                                        lastNameElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        patient.Last = lastNameElement.GetString();
+                                    }
+                                    
+                                    // Extract gender
+                                    if (demoDoc.RootElement.TryGetProperty("gender", out JsonElement genderElement) &&
+                                        genderElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        patient.Gender = genderElement.GetString();
+                                    }
+                                    
+                                    // Extract birth date
+                                    if (demoDoc.RootElement.TryGetProperty("dob", out JsonElement birthDateElement) &&
+                                        birthDateElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        if (DateTime.TryParse(birthDateElement.GetString(), out DateTime birthDate))
                                         {
-                                            patient.Gender = genderElement.GetString();
+                                            patient.BirthDate = birthDate;
                                         }
-                                        
-                                        // Extract phone
-                                        if (demoDoc.RootElement.TryGetProperty("phone", out JsonElement phoneElement) &&
-                                            phoneElement.ValueKind == JsonValueKind.String)
-                                        {
-                                            patient.Phone = phoneElement.GetString();
-                                        }
-                                        
-                                        // Extract address info
-                                        if (demoDoc.RootElement.TryGetProperty("address", out JsonElement addressElement) &&
-                                            addressElement.ValueKind == JsonValueKind.String)
-                                        {
-                                            patient.PatientAddress = addressElement.GetString();
-                                        }
-                                        
-                                        if (demoDoc.RootElement.TryGetProperty("city", out JsonElement cityElement) &&
-                                            cityElement.ValueKind == JsonValueKind.String)
-                                        {
-                                            patient.City = cityElement.GetString();
-                                        }
-                                        
-                                        if (demoDoc.RootElement.TryGetProperty("state", out JsonElement stateElement) &&
-                                            stateElement.ValueKind == JsonValueKind.String)
-                                        {
-                                            patient.State = stateElement.GetString();
-                                        }
-                                        
-                                        if (demoDoc.RootElement.TryGetProperty("zip", out JsonElement zipElement) &&
-                                            zipElement.ValueKind == JsonValueKind.String)
-                                        {
-                                            patient.Zip = zipElement.GetString();
-                                        }
+                                    }
+                                    
+                                    // Extract phone
+                                    if (demoDoc.RootElement.TryGetProperty("phone", out JsonElement phoneElement) &&
+                                        phoneElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        patient.Phone = phoneElement.GetString();
+                                    }
+                                    
+                                    // Extract email
+                                    if (demoDoc.RootElement.TryGetProperty("email", out JsonElement emailElement) &&
+                                        emailElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        patient.Email = emailElement.GetString();
+                                    }
+                                    
+                                    // Extract address info
+                                    if (demoDoc.RootElement.TryGetProperty("address", out JsonElement addressElement) &&
+                                        addressElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        patient.PatientAddress = addressElement.GetString();
+                                    }
+                                    
+                                    if (demoDoc.RootElement.TryGetProperty("city", out JsonElement cityElement) &&
+                                        cityElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        patient.City = cityElement.GetString();
+                                    }
+                                    
+                                    if (demoDoc.RootElement.TryGetProperty("state", out JsonElement stateElement) &&
+                                        stateElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        patient.State = stateElement.GetString();
+                                    }
+                                    
+                                    if (demoDoc.RootElement.TryGetProperty("zip", out JsonElement zipElement) &&
+                                        zipElement.ValueKind == JsonValueKind.String)
+                                    {
+                                        patient.Zip = zipElement.GetString();
                                     }
                                 }
                             }
@@ -293,6 +434,25 @@ namespace Phoenix_AzureAPI.Controllers
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, $"Error getting demographics for patient {id}");
+                }
+                
+                // If we didn't find the patient in demographics, try to find it in the patient list
+                if (!patientFound)
+                {
+                    _logger.LogInformation($"Patient {id} not found in demographics, trying to find in patient list");
+                    var allPatientsResult = await GetAllPatients();
+                    
+                    if (allPatientsResult.Result is OkObjectResult okResult && 
+                        okResult.Value is IEnumerable<Patient> patients)
+                    {
+                        var foundPatient = patients.FirstOrDefault(p => p.PatientID == id);
+                        if (foundPatient != null)
+                        {
+                            patient = foundPatient;
+                            patientFound = true;
+                            _logger.LogInformation($"Found patient {id} in patient list");
+                        }
+                    }
                 }
                 
                 if (patientFound)
@@ -316,31 +476,6 @@ namespace Phoenix_AzureAPI.Controllers
             {
                 var httpClient = _httpClientFactory.CreateClient();
                 var records = new List<object>();
-                
-                // Try to get addendums for the patient
-                try
-                {
-                    var addendumUrl = $"{ApiBaseUrl}addendum/{id}";
-                    _logger.LogInformation($"Fetching medical records from addendum: {addendumUrl}");
-                    var addendumResponse = await httpClient.GetAsync(addendumUrl);
-                    
-                    if (addendumResponse.IsSuccessStatusCode)
-                    {
-                        var jsonString = await addendumResponse.Content.ReadAsStringAsync();
-                        _logger.LogInformation($"Medical records response: {jsonString}");
-                        
-                        var addendum = JsonSerializer.Deserialize<object>(jsonString);
-                        
-                        if (addendum != null)
-                        {
-                            records.Add(new { Type = "Addendum", Data = addendum });
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, $"Error getting addendum for patient {id}");
-                }
                 
                 // Try to get allergies for the patient
                 try 
@@ -370,20 +505,20 @@ namespace Phoenix_AzureAPI.Controllers
                 // Try to get medications for the patient
                 try
                 {
-                    var medsUrl = $"{ApiBaseUrl}ListMEDS/{id}";
-                    _logger.LogInformation($"Fetching medications: {medsUrl}");
-                    var medsResponse = await httpClient.GetAsync(medsUrl);
+                    var medicationsUrl = $"{ApiBaseUrl}ListMEDS/{id}";
+                    _logger.LogInformation($"Fetching medications: {medicationsUrl}");
+                    var medicationsResponse = await httpClient.GetAsync(medicationsUrl);
                     
-                    if (medsResponse.IsSuccessStatusCode)
+                    if (medicationsResponse.IsSuccessStatusCode)
                     {
-                        var jsonString = await medsResponse.Content.ReadAsStringAsync();
+                        var jsonString = await medicationsResponse.Content.ReadAsStringAsync();
                         _logger.LogInformation($"Medications response: {jsonString}");
                         
-                        var meds = JsonSerializer.Deserialize<object>(jsonString);
+                        var medications = JsonSerializer.Deserialize<object>(jsonString);
                         
-                        if (meds != null)
+                        if (medications != null)
                         {
-                            records.Add(new { Type = "Medications", Data = meds });
+                            records.Add(new { Type = "Medications", Data = medications });
                         }
                     }
                 }
@@ -392,12 +527,222 @@ namespace Phoenix_AzureAPI.Controllers
                     _logger.LogWarning(ex, $"Error getting medications for patient {id}");
                 }
                 
+                // Try to get problems for the patient
+                try
+                {
+                    var problemsUrl = $"{ApiBaseUrl}ListProblem/{id}";
+                    _logger.LogInformation($"Forwarding request to ListProblem endpoint for patient {id}");
+                    var problemsResponse = await httpClient.GetAsync(problemsUrl);
+                    
+                    if (problemsResponse.IsSuccessStatusCode)
+                    {
+                        var jsonString = await problemsResponse.Content.ReadAsStringAsync();
+                        _logger.LogInformation($"Successfully retrieved problems for patient {id}");
+                        
+                        var problems = JsonSerializer.Deserialize<object>(jsonString);
+                        
+                        if (problems != null)
+                        {
+                            records.Add(new { Type = "Problems", Data = problems });
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Failed to retrieve problems for patient {id}. Status code: {problemsResponse.StatusCode}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error forwarding request to ListProblem endpoint for patient {id}");
+                }
+                
+                // Try to get notes for the patient
+                try
+                {
+                    var notesUrl = $"{ApiBaseUrl}notes/{id}";
+                    _logger.LogInformation($"Fetching notes: {notesUrl}");
+                    var notesResponse = await httpClient.GetAsync(notesUrl);
+                    
+                    if (notesResponse.IsSuccessStatusCode)
+                    {
+                        var jsonString = await notesResponse.Content.ReadAsStringAsync();
+                        _logger.LogInformation($"Notes response: {jsonString}");
+                        
+                        var notes = JsonSerializer.Deserialize<object>(jsonString);
+                        
+                        if (notes != null)
+                        {
+                            records.Add(new { Type = "Notes", Data = notes });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Error getting notes for patient {id}");
+                }
+                
+                _logger.LogInformation($"Retrieved {records.Count} medical record types for patient {id}");
                 return Ok(records);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting medical records for patient with ID {id}");
-                return StatusCode(500, $"Error retrieving medical records for patient with ID {id}");
+                _logger.LogError(ex, $"Error getting medical records for patient {id}");
+                return StatusCode(500, $"Error retrieving medical records for patient {id}");
+            }
+        }
+        
+        // Add a new method to forward requests to the Demographics endpoint
+        [HttpGet]
+        [Route("/api/Demographics/{id}")]
+        public async Task<IActionResult> GetDemographics(int id)
+        {
+            try
+            {
+                _logger.LogInformation($"Forwarding request to Demographics endpoint for patient {id}");
+                var httpClient = _httpClientFactory.CreateClient();
+                var url = $"{ApiBaseUrl}Demographics/{id}";
+                
+                _logger.LogInformation($"Requesting: {url}");
+                var response = await httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    _logger.LogInformation($"Successfully retrieved demographics for patient {id}");
+                    return Content(content, "application/json");
+                }
+                
+                _logger.LogWarning($"Failed to retrieve demographics for patient {id}. Status code: {response.StatusCode}");
+                return StatusCode((int)response.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error forwarding request to Demographics endpoint for patient {id}");
+                return StatusCode(500, "Error retrieving demographics");
+            }
+        }
+        
+        // Add a new method to forward requests to the ListAllergies endpoint
+        [HttpGet]
+        [Route("/api/ListAllergies/{id}")]
+        public async Task<IActionResult> GetAllergies(int id)
+        {
+            try
+            {
+                _logger.LogInformation($"Forwarding request to ListAllergies endpoint for patient {id}");
+                var httpClient = _httpClientFactory.CreateClient();
+                var url = $"{ApiBaseUrl}ListAllergies/{id}";
+                
+                _logger.LogInformation($"Requesting: {url}");
+                var response = await httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    _logger.LogInformation($"Successfully retrieved allergies for patient {id}");
+                    return Content(content, "application/json");
+                }
+                
+                _logger.LogWarning($"Failed to retrieve allergies for patient {id}. Status code: {response.StatusCode}");
+                return StatusCode((int)response.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error forwarding request to ListAllergies endpoint for patient {id}");
+                return StatusCode(500, "Error retrieving allergies");
+            }
+        }
+        
+        // Add a new method to forward requests to the ListMedications endpoint
+        [HttpGet]
+        [Route("/api/ListMEDS/{id}")]
+        public async Task<IActionResult> GetMedications(int id)
+        {
+            try
+            {
+                _logger.LogInformation($"Forwarding request to ListMEDS endpoint for patient {id}");
+                var httpClient = _httpClientFactory.CreateClient();
+                var url = $"{ApiBaseUrl}ListMEDS/{id}";
+                
+                _logger.LogInformation($"Requesting: {url}");
+                var response = await httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    _logger.LogInformation($"Successfully retrieved medications for patient {id}");
+                    return Content(content, "application/json");
+                }
+                
+                _logger.LogWarning($"Failed to retrieve medications for patient {id}. Status code: {response.StatusCode}");
+                return StatusCode((int)response.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error forwarding request to ListMEDS endpoint for patient {id}");
+                return StatusCode(500, "Error retrieving medications");
+            }
+        }
+        
+        // Add a new method to forward requests to the ListProblem endpoint
+        [HttpGet]
+        [Route("/api/ListProblem/{id}")]
+        public async Task<IActionResult> GetProblems(int id)
+        {
+            try
+            {
+                _logger.LogInformation($"Forwarding request to ListProblem endpoint for patient {id}");
+                var httpClient = _httpClientFactory.CreateClient();
+                var url = $"{ApiBaseUrl}ListProblem/{id}";
+                
+                _logger.LogInformation($"Requesting: {url}");
+                var response = await httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    _logger.LogInformation($"Successfully retrieved problems for patient {id}");
+                    return Content(content, "application/json");
+                }
+                
+                _logger.LogWarning($"Failed to retrieve problems for patient {id}. Status code: {response.StatusCode}");
+                return StatusCode((int)response.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error forwarding request to ListProblem endpoint for patient {id}");
+                return StatusCode(500, "Error retrieving problems");
+            }
+        }
+        
+        // Add a new method to forward requests to the PatientIndex endpoint
+        [HttpGet]
+        [Route("/api/PatientIndex")]
+        public async Task<IActionResult> GetPatientIndex()
+        {
+            try
+            {
+                _logger.LogInformation("Forwarding request to PatientIndex endpoint");
+                var httpClient = _httpClientFactory.CreateClient();
+                var url = $"{ApiBaseUrl}PatientIndex";
+                
+                _logger.LogInformation($"Requesting: {url}");
+                var response = await httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    _logger.LogInformation("Successfully retrieved patient index");
+                    return Content(content, "application/json");
+                }
+                
+                _logger.LogWarning($"Failed to retrieve patient index. Status code: {response.StatusCode}");
+                return StatusCode((int)response.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error forwarding request to PatientIndex endpoint");
+                return StatusCode(500, "Error retrieving patient index");
             }
         }
         
@@ -535,6 +880,50 @@ namespace Phoenix_AzureAPI.Controllers
             
             // Standard proper case
             return char.ToUpper(text[0]) + (text.Length > 1 ? text.Substring(1).ToLower() : "");
+        }
+        
+        private void ParsePatientNameFromAddendum(string fullNameWithDob, Patient patient)
+        {
+            try
+            {
+                // Format: "LASTNAME, FIRSTNAME (DOB: MM/DD/YYYY)"
+                int commaIndex = fullNameWithDob.IndexOf(',');
+                if (commaIndex > 0)
+                {
+                    patient.Last = fullNameWithDob.Substring(0, commaIndex).Trim();
+                    
+                    int dobIndex = fullNameWithDob.IndexOf("(DOB:", commaIndex);
+                    if (dobIndex > commaIndex)
+                    {
+                        patient.First = fullNameWithDob.Substring(commaIndex + 1, dobIndex - commaIndex - 1).Trim();
+                        
+                        // Extract DOB
+                        int dobStartIndex = dobIndex + 6; // Length of "(DOB: "
+                        int dobEndIndex = fullNameWithDob.IndexOf(')', dobStartIndex);
+                        if (dobEndIndex > dobStartIndex)
+                        {
+                            string dobString = fullNameWithDob.Substring(dobStartIndex, dobEndIndex - dobStartIndex).Trim();
+                            if (DateTime.TryParse(dobString, out DateTime dob))
+                            {
+                                patient.BirthDate = dob;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        patient.First = fullNameWithDob.Substring(commaIndex + 1).Trim();
+                    }
+                }
+                else
+                {
+                    // If no comma found, just use the whole string as the name
+                    patient.Last = fullNameWithDob.Trim();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, $"Error parsing patient name from addendum: {fullNameWithDob}");
+            }
         }
     }
 }
