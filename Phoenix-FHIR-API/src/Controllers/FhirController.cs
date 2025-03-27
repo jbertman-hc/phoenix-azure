@@ -347,5 +347,137 @@ namespace Phoenix_FHIR_API.Controllers
                 return StatusCode(500, $"Error getting all Patients: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// Validate a FHIR resource
+        /// </summary>
+        /// <param name="validationRequest">The resource to validate</param>
+        /// <returns>OperationOutcome with validation results</returns>
+        [HttpPost("$validate")]
+        [SwaggerOperation(
+            Summary = "Validate a FHIR resource",
+            Description = "Validates a FHIR resource against profiles and returns an OperationOutcome with validation results",
+            OperationId = "ValidateResource",
+            Tags = new[] { "FHIR" }
+        )]
+        [SwaggerResponse(200, "Validation results", typeof(OperationOutcome))]
+        [SwaggerResponse(400, "Invalid request")]
+        [SwaggerResponse(500, "Internal server error")]
+        [Consumes("application/json", "application/fhir+json")]
+        [Produces("application/fhir+json")]
+        public IActionResult ValidateResource([FromBody] ValidationRequest validationRequest)
+        {
+            try
+            {
+                if (validationRequest?.ResourceToValidate == null)
+                {
+                    return BadRequest("No resource provided for validation");
+                }
+
+                // Create an OperationOutcome for the validation results
+                var outcome = new OperationOutcome
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Meta = new Meta
+                    {
+                        LastUpdated = DateTimeOffset.UtcNow
+                    },
+                    Issue = new List<OperationOutcome.IssueComponent>()
+                };
+
+                // Determine the resource type and validate
+                var resource = validationRequest.ResourceToValidate;
+                var resourceType = resource.GetType().Name;
+
+                // Validate the resource
+                bool isValid = true;
+                IEnumerable<string> validationIssues = new List<string>();
+
+                // Handle different resource types
+                if (resource is Patient patient)
+                {
+                    isValid = _validator.Validate(patient, out validationIssues);
+                }
+                else if (resource is Bundle bundle)
+                {
+                    // For bundles, validate each entry
+                    List<string> allIssues = new List<string>();
+                    foreach (var entry in bundle.Entry)
+                    {
+                        if (entry.Resource is Patient bundlePatient)
+                        {
+                            IEnumerable<string> patientIssues;
+                            bool patientValid = _validator.Validate(bundlePatient, out patientIssues);
+                            if (!patientValid)
+                            {
+                                isValid = false;
+                                allIssues.AddRange(patientIssues.Select(issue => $"Patient {bundlePatient.Id}: {issue}"));
+                            }
+                        }
+                        // Add more resource types as they are implemented
+                    }
+                    validationIssues = allIssues;
+                }
+                else
+                {
+                    // For unsupported resource types
+                    outcome.Issue.Add(new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Warning,
+                        Code = OperationOutcome.IssueType.NotSupported,
+                        Details = new CodeableConcept
+                        {
+                            Text = $"Validation for resource type {resourceType} is not yet supported"
+                        }
+                    });
+                }
+
+                // Add validation issues to the outcome
+                foreach (var issue in validationIssues)
+                {
+                    outcome.Issue.Add(new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.Invalid,
+                        Details = new CodeableConcept
+                        {
+                            Text = issue
+                        }
+                    });
+                }
+
+                // If no issues were found, add a success message
+                if (outcome.Issue.Count == 0)
+                {
+                    outcome.Issue.Add(new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Information,
+                        Code = OperationOutcome.IssueType.Informational,
+                        Details = new CodeableConcept
+                        {
+                            Text = $"Resource validation successful"
+                        }
+                    });
+                }
+
+                return Ok(outcome);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating resource");
+                return StatusCode(500, $"Error validating resource: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Request model for resource validation
+    /// </summary>
+    public class ValidationRequest
+    {
+        /// <summary>
+        /// The resource to validate
+        /// </summary>
+        public Resource? ResourceToValidate { get; set; }
     }
 }

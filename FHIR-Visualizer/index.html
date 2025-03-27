@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phoenix FHIR Visualizer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-activity me-2"></i>Phoenix FHIR Visualizer
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" data-resource-type="Patient">Patients</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-resource-type="Practitioner">Practitioners</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-resource-type="Organization">Organizations</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-resource-type="Location">Locations</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-resource-type="Observation">Observations</a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="metadata-link">
+                            <i class="bi bi-info-circle me-1"></i>Metadata
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="validation-link">
+                            <i class="bi bi-check-circle me-1"></i>Validation
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0" id="resource-list-title">Patients</h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" id="view-bundle-btn">
+                                <i class="bi bi-box me-1"></i>View Bundle
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary ms-2" id="refresh-btn">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="resource-loading" class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading resources...</p>
+                        </div>
+                        <div id="resource-error" class="alert alert-danger m-3 d-none">
+                            Failed to load resources
+                        </div>
+                        <ul class="list-group list-group-flush" id="resource-list"></ul>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">FHIR Server Info</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>FHIR Server:</strong> <span id="server-url">http://localhost:5300/api</span></p>
+                        <p><strong>Backend API:</strong> <span id="backend-url">https://apiserviceswin20250318.azurewebsites.net/api</span></p>
+                        <p><strong>Data Source:</strong> <span id="data-source">Legacy healthcare data from AmazingCharts SQL database</span></p>
+                        <p><strong>FHIR Version:</strong> <span id="fhir-version">R4</span></p>
+                        <p><strong>Resources Available:</strong> <span id="resources-count">Loading...</span></p>
+                        <div class="d-grid">
+                            <button class="btn btn-outline-primary" id="server-config-btn">
+                                <i class="bi bi-gear me-1"></i>Configure Server
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9">
+                <!-- Resource Details -->
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Resource Details</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="resource-details">
+                                <div class="alert alert-info">Select a resource to view details</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Validation Results -->
+                <div class="card mb-4 d-none" id="validation-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Validation Results</h5>
+                        <button class="btn btn-sm btn-outline-danger" id="close-validation-btn">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="validation-loading" class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Validating resource...</p>
+                        </div>
+                        <div id="validation-results"></div>
+                    </div>
+                </div>
+
+                <!-- Metadata -->
+                <div class="card mb-4 d-none" id="metadata-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">FHIR Server Metadata</h5>
+                        <button class="btn btn-sm btn-outline-danger" id="close-metadata-btn">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="metadata-loading" class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading metadata...</p>
+                        </div>
+                        <pre id="metadata-content" class="d-none"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Server Configuration Modal -->
+    <div class="modal fade" id="server-config-modal" tabindex="-1" aria-labelledby="server-config-modal-label" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="server-config-modal-label">Server Configuration</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="server-url-input" class="form-label">FHIR Server URL</label>
+                        <input type="text" class="form-control" id="server-url-input" placeholder="http://localhost:5300/api">
+                    </div>
+                    <div class="mb-3">
+                        <label for="backend-url-input" class="form-label">Backend API URL</label>
+                        <input type="text" class="form-control" id="backend-url-input" placeholder="https://apiserviceswin20250318.azurewebsites.net/api">
+                    </div>
+                    <div class="mb-3">
+                        <label for="data-source-input" class="form-label">Data Source Description</label>
+                        <input type="text" class="form-control" id="data-source-input" placeholder="Legacy healthcare data from AmazingCharts SQL database">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-server-config">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bundle Modal -->
+    <div class="modal fade" id="bundle-modal" tabindex="-1" aria-labelledby="bundle-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bundle-modal-label">FHIR Bundle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <button id="bundle-validate-btn" class="btn btn-primary">
+                            <i class="bi bi-check-circle me-1"></i>Validate Bundle
+                        </button>
+                    </div>
+                    <div id="validation-loading" class="text-center py-3 d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Validating...</span>
+                        </div>
+                        <p class="mt-2">Validating bundle...</p>
+                    </div>
+                    <div id="validation-results"></div>
+                    <div id="bundle-content"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
