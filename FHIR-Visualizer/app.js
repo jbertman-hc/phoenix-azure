@@ -2,7 +2,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Configuration
     let config = {
-        serverUrl: 'http://localhost:5300/api',
+        serverUrl: 'http://localhost:5301/api',
         currentResourceType: 'Patient',
         selectedResourceId: null,
         backendInfo: {
@@ -17,13 +17,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const elements = {
         resourceList: document.getElementById('resource-list'),
         resourceDetails: document.getElementById('resource-details'),
+        resourceLoading: document.getElementById('resource-loading'),
         refreshBtn: document.getElementById('refresh-btn'),
         viewBundleBtn: document.getElementById('view-bundle-btn'),
         bundleModal: document.getElementById('bundle-modal'),
         bundleContent: document.getElementById('bundle-content'),
         bundleValidateBtn: document.getElementById('bundle-validate-btn'),
         validationResults: document.getElementById('validation-results'),
-        validationLoading: document.getElementById('validation-loading')
+        validationLoading: document.getElementById('validation-loading'),
+        validateResourceBtn: document.getElementById('validate-resource-btn'),
+        validateResourceContainer: document.getElementById('validate-resource-container'),
+        resourceValidationResults: document.getElementById('resource-validation-results')
     };
 
     // Initialize UI
@@ -74,6 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadResources(resourceType) {
         // Clear previous resources and show loading state
         elements.resourceList.innerHTML = '';
+        elements.resourceLoading.classList.remove('d-none');
         
         try {
             const response = await fetch(`${config.serverUrl}/${resourceType}`);
@@ -85,6 +90,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Store the full bundle for later viewing
             config.currentBundle = data;
+            
+            // Hide loading spinner
+            elements.resourceLoading.classList.add('d-none');
             
             if (data.entry && data.entry.length > 0) {
                 data.entry.forEach(entry => {
@@ -161,6 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function displayResourceDetails(resource) {
         // Clear previous details
         elements.resourceDetails.innerHTML = '';
+        elements.validateResourceContainer.classList.add('d-none');
         
         if (!resource) {
             elements.resourceDetails.innerHTML = '<div class="alert alert-warning">No resource selected</div>';
@@ -180,6 +189,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
             `;
+            
+            // Show validate button
+            elements.validateResourceContainer.classList.remove('d-none');
+            
+            // Set up validate button click handler
+            elements.validateResourceBtn.onclick = () => validateResource(resource);
         } catch (error) {
             console.error('Error displaying resource details:', error);
             elements.resourceDetails.innerHTML = `<div class="alert alert-danger">Error displaying resource: ${error.message}</div>`;
@@ -203,11 +218,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function validateBundle() {
         if (!config.currentBundle) {
-            alert('No bundle available to validate');
             return;
         }
         
-        // Show validation card and loading state
+        // Show validation loading state
         elements.validationLoading.classList.remove('d-none');
         elements.validationResults.innerHTML = '';
         
@@ -222,15 +236,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     const details = getValueFromFhirProperty(issue.details?.text) || 'No details provided';
                     const location = issue.expression ? issue.expression.map(e => getValueFromFhirProperty(e)).join(', ') : 'Unknown location';
                     
-                    let severityClass = 'validation-info';
+                    let severityClass = 'alert-info';
                     if (severity === 'error') {
-                        severityClass = 'validation-error';
+                        severityClass = 'alert-danger';
                     } else if (severity === 'warning') {
-                        severityClass = 'validation-warning';
+                        severityClass = 'alert-warning';
                     }
                     
                     return `
-                        <div class="validation-issue ${severityClass}">
+                        <div class="alert ${severityClass} mb-3">
                             <div class="d-flex justify-content-between">
                                 <strong>${severity.toUpperCase()}</strong>
                                 <span>${location}</span>
@@ -253,7 +267,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 elements.validationResults.innerHTML = `
                     <div class="alert alert-success">
                         <i class="bi bi-check-circle-fill me-2"></i>
-                        ${config.currentResourceType} Bundle is valid. No issues found.
+                        Bundle is valid. No issues found.
                     </div>
                 `;
             }
@@ -271,6 +285,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function validateBundleHelper(bundle) {
         try {
+            console.log('Validating bundle/resource:', JSON.stringify(bundle, null, 2).substring(0, 200) + '...');
+            
             const response = await fetch(`${config.serverUrl}/fhir/$validate`, {
                 method: 'POST',
                 headers: {
@@ -282,15 +298,103 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
             });
 
+            console.log('Validation response status:', response.status);
+            
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorText = await response.text();
+                console.error('Validation error response:', errorText);
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
             const outcome = await response.json();
+            console.log('Validation outcome:', JSON.stringify(outcome, null, 2).substring(0, 200) + '...');
             return outcome;
         } catch (error) {
-            console.error('Error validating bundle:', error);
-            throw error;
+            console.error('Error validating bundle/resource:', error);
+            // Return a default OperationOutcome with the error
+            return {
+                resourceType: "OperationOutcome",
+                issue: [
+                    {
+                        severity: "error",
+                        code: "exception",
+                        details: {
+                            text: `Validation failed: ${error.message}`
+                        }
+                    }
+                ]
+            };
+        }
+    }
+
+    async function validateResource(resource) {
+        if (!resource) {
+            return;
+        }
+        
+        // Show validation loading state
+        elements.resourceValidationResults.innerHTML = `
+            <div class="text-center py-3">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Validating...</span>
+                </div>
+                <p class="mt-2">Validating resource...</p>
+            </div>
+        `;
+        
+        try {
+            const outcome = await validateBundleHelper(resource);
+            
+            // Display validation results
+            if (outcome.issue && outcome.issue.length > 0) {
+                const issuesHtml = outcome.issue.map(issue => {
+                    const severity = getValueFromFhirProperty(issue.severity) || 'unknown';
+                    const details = getValueFromFhirProperty(issue.details?.text) || 'No details provided';
+                    const location = issue.expression ? issue.expression.map(e => getValueFromFhirProperty(e)).join(', ') : 'Unknown location';
+                    
+                    let severityClass = 'alert-info';
+                    if (severity === 'error') {
+                        severityClass = 'alert-danger';
+                    } else if (severity === 'warning') {
+                        severityClass = 'alert-warning';
+                    }
+                    
+                    return `
+                        <div class="alert ${severityClass} mb-3">
+                            <div class="d-flex justify-content-between">
+                                <strong>${severity.toUpperCase()}</strong>
+                                <span>${location}</span>
+                            </div>
+                            <div class="mt-2">${details}</div>
+                        </div>
+                    `;
+                }).join('');
+                
+                elements.resourceValidationResults.innerHTML = `
+                    <div class="mb-3">
+                        <strong>Resource:</strong> ${resource.resourceType}
+                    </div>
+                    <div class="mb-3">
+                        <strong>Issues Found:</strong> ${outcome.issue.length}
+                    </div>
+                    ${issuesHtml}
+                `;
+            } else {
+                elements.resourceValidationResults.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        Resource is valid. No issues found.
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error validating resource:', error);
+            elements.resourceValidationResults.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    Failed to validate resource: ${error.message}
+                </div>
+            `;
         }
     }
 });
