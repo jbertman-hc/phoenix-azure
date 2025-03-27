@@ -31,38 +31,24 @@ A standards-compliant FHIR R4 API that serves as the transformation layer betwee
 - **Validators**: Ensure FHIR compliance
   - `FhirResourceValidator`: Validates resources against FHIR specifications
 
-### 2. Phoenix-AzureAPI
+### 2. FHIR-Visualizer (Main Client)
 
-An ASP.NET Core API that serves as the backend for the Phoenix-Azure application, connecting to the remote Azure API.
-
-**Key Features:**
-- Acts as a proxy to the Azure API at `apiserviceswin20250318.azurewebsites.net/api`
-- Implements multiple strategies to retrieve patient data
-- Handles authentication and authorization
-- Manages data access and transformation
-
-**Implementation Details:**
-- Uses a multi-endpoint approach to retrieve patient data:
-  1. First tries the PatientIndex endpoint to get patient IDs
-  2. Fetches demographics for each patient ID
-  3. Falls back to addendum records if needed
-
-### 3. Phoenix-AzureClient
-
-A web-based client application that provides a user interface for interacting with the Phoenix-FHIR-API.
+A modern, flexible web-based client application specifically designed to visualize and interact with FHIR resources.
 
 **Key Features:**
-- Displays patient information in a user-friendly interface
-- Provides FHIR resource exploration capabilities
-- Offers validation functionality for FHIR resources
-- Supports searching and filtering of patient data
+- Displays multiple FHIR resource types in a user-friendly interface
+- Provides both formatted human-readable and raw JSON views of resources
+- Validates resources against FHIR standards
+- Explores server metadata and capability statements
+- Configurable to connect to different FHIR servers
 
 **Implementation Details:**
 - Built with HTML, CSS, and JavaScript
-- Communicates with the Phoenix-FHIR-API to retrieve and display data
-- Includes a FHIR Explorer interface for viewing and validating FHIR resources
+- Responsive design that works on desktop and mobile devices
+- No dependencies on server-side rendering
+- Communicates directly with the Phoenix-FHIR-API
 
-### 4. DataAccess
+### 3. DataAccess
 
 A data access layer that provides repository implementations for connecting to various data sources.
 
@@ -70,6 +56,18 @@ A data access layer that provides repository implementations for connecting to v
 - Implements the repository pattern for data access abstraction
 - Supports both SQL and FHIR data sources
 - Provides a consistent interface for data retrieval and manipulation
+
+### 4. Phoenix-AzureAPI (Deprecated)
+
+> **Note:** This component is deprecated in favor of the Phoenix-FHIR-API, which provides a more standards-compliant implementation.
+
+An ASP.NET Core API that serves as the backend for the Phoenix-Azure application, connecting to the remote Azure API.
+
+### 5. Phoenix-AzureClient (Deprecated)
+
+> **Note:** This component is deprecated in favor of the FHIR-Visualizer, which provides a more comprehensive and flexible interface for FHIR resources.
+
+A web-based client application that provides a user interface for interacting with the Phoenix-FHIR-API.
 
 ## Architecture and Data Flow
 
@@ -101,13 +99,13 @@ The Phoenix Healthcare Interoperability Platform implements a multi-tiered archi
 
 ### Data Flow Process
 
-1. **Request Initiation**: User interaction with the Phoenix-AzureClient triggers a request
+1. **Request Initiation**: User interaction with the FHIR-Visualizer triggers a request
 2. **API Handling**: The Phoenix-FHIR-API receives the request
 3. **Data Retrieval**: The API retrieves data from the Azure backend using the LegacyApiService
 4. **Transformation**: The retrieved data is transformed into FHIR resources using appropriate mappers
 5. **Validation**: The FHIR resources are validated against FHIR standards
 6. **Response**: The validated FHIR resources are returned to the client
-7. **Presentation**: The client displays the FHIR resources to the user
+7. **Presentation**: The FHIR-Visualizer displays the FHIR resources to the user
 
 ## Implementation Approach
 
@@ -140,7 +138,7 @@ Future development will focus on implementing additional FHIR resources, includi
 
 ### Prerequisites
 - .NET 6.0 or later
-- Node.js (for running the client)
+- Python 3.x (for running the FHIR-Visualizer)
 
 ### Running the Application
 1. Start the Phoenix-FHIR-API:
@@ -149,13 +147,13 @@ Future development will focus on implementing additional FHIR resources, includi
    dotnet run
    ```
 
-2. Start the Phoenix-AzureClient:
+2. Start the FHIR-Visualizer:
    ```
-   cd Phoenix-AzureClient
-   python -m http.server 8090
+   cd FHIR-Visualizer
+   python -m http.server 8095
    ```
 
-3. Access the client at `http://localhost:8090/fhir-demo.html`
+3. Access the FHIR-Visualizer at `http://localhost:8095`
 
 ## Conclusion
 
