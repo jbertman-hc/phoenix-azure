@@ -25,6 +25,11 @@ namespace Phoenix_AzureAPI.Services.FHIR
         Resource ParseResource(string json);
 
         /// <summary>
+        /// Parses a JSON string to a FHIR resource with explicit type
+        /// </summary>
+        T ParseResource<T>(string json) where T : Resource;
+
+        /// <summary>
         /// Validates a FHIR resource against standard profiles
         /// </summary>
         ValidationResult Validate(Base resource);

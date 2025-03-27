@@ -24,7 +24,6 @@ const backToListBtn = document.getElementById('backToListBtn');
 const searchInput = document.getElementById('searchInput');
 const clearSearchBtn = document.getElementById('clearSearchBtn');
 const patientsLink = document.getElementById('patientsLink');
-const viewFhirBtn = document.getElementById('viewFhirBtn');
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
@@ -68,17 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     } else {
         console.error('Clear search button not found');
-    }
-    
-    if (viewFhirBtn) {
-        viewFhirBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (currentPatientId) {
-                window.location.href = `fhir-explorer.html?resourceType=Patient&patientId=${currentPatientId}`;
-            }
-        });
-    } else {
-        console.error('View FHIR button not found');
     }
     
     // Add event listeners for table sorting

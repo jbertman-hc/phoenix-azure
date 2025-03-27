@@ -139,20 +139,54 @@ namespace Phoenix_AzureAPI.Controllers
                 _logger.LogInformation($"Mapped {fhirPatients.Count} patients to FHIR resources");
                 
                 // Step 3: Create a FHIR Bundle to contain all the Patient resources
-                // A Bundle is a FHIR-specific container that groups multiple resources together
+                // Use the Firely SDK's built-in methods to ensure FHIR compliance
                 var bundle = new Bundle
                 {
-                    Type = Bundle.BundleType.Searchset, // Indicates this is a search result
-                    Total = fhirPatients.Count // Number of patients in the bundle
+                    Type = Bundle.BundleType.Searchset,
+                    Total = fhirPatients.Count,
+                    Timestamp = DateTimeOffset.UtcNow
+                };
+                
+                // Add a self link (required for searchsets)
+                bundle.Link = new List<Bundle.LinkComponent>
+                {
+                    new Bundle.LinkComponent
+                    {
+                        Relation = "self",
+                        Url = $"{Request.Scheme}://{Request.Host}{Request.Path}{Request.QueryString}"
+                    }
                 };
                 
                 // Step 4: Add each FHIR Patient resource to the Bundle as an entry
+                var baseUrl = $"{Request.Scheme}://{Request.Host}";
+                var seenIds = new HashSet<string>(); // Track IDs to ensure uniqueness
+                
                 foreach (var fhirPatient in fhirPatients)
                 {
+                    var patientId = fhirPatient.Id;
+                    
+                    // If we've seen this ID before, make it unique with a version ID
+                    if (seenIds.Contains(patientId))
+                    {
+                        if (fhirPatient.Meta == null)
+                            fhirPatient.Meta = new Meta();
+                            
+                        fhirPatient.Meta.VersionId = Guid.NewGuid().ToString();
+                    }
+                    else
+                    {
+                        seenIds.Add(patientId);
+                    }
+                    
+                    // Create an absolute URL for the fullUrl (required by FHIR spec)
+                    var fullUrl = $"{baseUrl}/api/fhir/Patient/{patientId}";
+                    
+                    // Add entry to the bundle with search mode
                     bundle.Entry.Add(new Bundle.EntryComponent
                     {
-                        Resource = fhirPatient, // The actual FHIR Patient resource
-                        FullUrl = $"Patient/{fhirPatient.Id}" // A relative URL for this resource
+                        Resource = fhirPatient,
+                        FullUrl = fullUrl,
+                        Search = new Bundle.SearchComponent { Mode = Bundle.SearchEntryMode.Match }
                     });
                 }
                 
@@ -300,7 +334,40 @@ namespace Phoenix_AzureAPI.Controllers
                 
                 Resource resource;
                 try {
-                    resource = _fhirService.ParseResource(jsonString);
+                    // Try to parse the resource with explicit type information
+                    JObject jsonObject = JObject.Parse(jsonString);
+                    
+                    // Get the resource type from the JSON
+                    string resourceType = null;
+                    if (jsonObject.TryGetValue("resourceType", out JToken resourceTypeToken))
+                    {
+                        resourceType = resourceTypeToken.ToString();
+                        _logger.LogInformation($"Resource type from JSON: {resourceType}");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("No resourceType found in JSON");
+                        return BadRequest("Invalid FHIR resource: missing resourceType property");
+                    }
+                    
+                    // Parse the resource based on its type
+                    switch (resourceType)
+                    {
+                        case "Patient":
+                            resource = _fhirService.ParseResource<Hl7.Fhir.Model.Patient>(jsonString);
+                            break;
+                        case "Bundle":
+                            resource = _fhirService.ParseResource<Hl7.Fhir.Model.Bundle>(jsonString);
+                            break;
+                        case "CapabilityStatement":
+                            resource = _fhirService.ParseResource<Hl7.Fhir.Model.CapabilityStatement>(jsonString);
+                            break;
+                        default:
+                            // For unknown types, try generic parsing
+                            resource = _fhirService.ParseResource(jsonString);
+                            break;
+                    }
+                    
                     _logger.LogInformation("Successfully parsed resource of type: {ResourceType}", resource.TypeName);
                 }
                 catch (Exception ex)
@@ -410,38 +477,27 @@ namespace Phoenix_AzureAPI.Controllers
                 var patients = await _patientDataService.GetAllPatientsAsync();
                 _logger.LogInformation($"PatientDataService returned {patients.Count()} patients");
                 
-                // If no patients were returned, try the alternative method
+                // If no patients were returned, log a warning
                 if (!patients.Any())
                 {
-                    _logger.LogWarning("No patients returned from GetAllPatientsAsync, trying direct patient retrieval");
-                    
-                    // Get all patient IDs
-                    var patientIds = new List<int> { 1001, 1004, 1009, 1022, 1033, 1051, 1059, 1060, 1101, 1107 };
-                    var retrievedPatients = new List<DomainPatient>();
-                    
-                    // Try to retrieve each patient individually
-                    foreach (var id in patientIds)
-                    {
-                        try
-                        {
-                            var patient = await _patientDataService.GetPatientByIdAsync(id);
-                            if (patient != null)
-                            {
-                                _logger.LogInformation($"Successfully retrieved patient with ID {id}");
-                                retrievedPatients.Add(patient);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, $"Could not retrieve patient with ID {id}");
-                        }
-                    }
-                    
-                    _logger.LogInformation($"Retrieved {retrievedPatients.Count} patients through individual lookups");
-                    return retrievedPatients;
+                    _logger.LogWarning("No patients returned from GetAllPatientsAsync");
+                    return new List<DomainPatient>();
                 }
                 
-                return patients.ToList();
+                // Create a dictionary to track unique patients by ID
+                var uniquePatients = new Dictionary<int, DomainPatient>();
+                
+                // Add patients from the main query
+                foreach (var patient in patients)
+                {
+                    if (patient != null && patient.PatientID > 0 && !uniquePatients.ContainsKey(patient.PatientID))
+                    {
+                        uniquePatients[patient.PatientID] = patient;
+                    }
+                }
+                
+                _logger.LogInformation($"Returning {uniquePatients.Count} unique patients");
+                return uniquePatients.Values.ToList();
             }
             catch (Exception ex)
             {

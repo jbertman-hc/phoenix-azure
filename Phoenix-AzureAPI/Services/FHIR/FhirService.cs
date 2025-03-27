@@ -159,6 +159,54 @@ namespace Phoenix_AzureAPI.Services.FHIR
         }
         
         /// <summary>
+        /// Parse a FHIR resource from JSON with explicit type
+        /// </summary>
+        public T ParseResource<T>(string json) where T : Resource
+        {
+            try
+            {
+                _logger.LogInformation($"Parsing FHIR resource from JSON with explicit type {typeof(T).Name}");
+                
+                // Create a parser with appropriate settings
+                var parser = new FhirJsonParser(new ParserSettings
+                {
+                    AcceptUnknownMembers = true,
+                    AllowUnrecognizedEnums = true,
+                    PermissiveParsing = true
+                });
+                
+                // Parse with explicit type
+                T resource = parser.Parse<T>(json);
+                
+                _logger.LogInformation($"Successfully parsed resource of type: {resource.TypeName}");
+                
+                // If it's a Patient, fix date formats
+                if (resource is Patient patient)
+                {
+                    FixPatientDateFormats(patient);
+                }
+                // If it's a Bundle, fix date formats for any Patient resources
+                else if (resource is Bundle bundle && bundle.Entry != null)
+                {
+                    foreach (var entry in bundle.Entry)
+                    {
+                        if (entry.Resource is Patient patientInBundle)
+                        {
+                            FixPatientDateFormats(patientInBundle);
+                        }
+                    }
+                }
+                
+                return resource;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error parsing FHIR resource from JSON as {typeof(T).Name}");
+                throw new FormatException($"Invalid FHIR resource format: {ex.Message}", ex);
+            }
+        }
+        
+        /// <summary>
         /// Fix date format issues in Patient resources
         /// </summary>
         private void FixPatientDateFormats(Patient patient)
@@ -503,6 +551,14 @@ namespace Phoenix_AzureAPI.Services.FHIR
                     Issue = new List<OperationOutcome.IssueComponent>()
                 };
                 
+                // Add resource type information
+                outcome.Issue.Add(new OperationOutcome.IssueComponent
+                {
+                    Severity = OperationOutcome.IssueSeverity.Information,
+                    Code = OperationOutcome.IssueType.Informational,
+                    Diagnostics = $"Resource type: {resource.TypeName}"
+                });
+                
                 // Check if resource has the required elements
                 if (resource is Patient patient)
                 {
@@ -526,12 +582,20 @@ namespace Phoenix_AzureAPI.Services.FHIR
                             Diagnostics = $"Resource is missing an ID"
                         });
                     }
+                    
+                    // Add a note about limited validation for this resource type
+                    outcome.Issue.Add(new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Information,
+                        Code = OperationOutcome.IssueType.Informational,
+                        Diagnostics = $"Limited validation performed for {resource.TypeName} resources"
+                    });
                 }
                 
                 _logger.LogInformation("Validation complete. Found {IssueCount} issues", outcome.Issue.Count);
                 
                 // If no issues were found, add an information message
-                if (outcome.Issue.Count == 0)
+                if (outcome.Issue.Count <= 1) // Count could be 1 due to the resource type info we added
                 {
                     outcome.Issue.Add(new OperationOutcome.IssueComponent
                     {

@@ -63,17 +63,12 @@ namespace Phoenix_AzureAPI.Services.FHIR
                         Family = source.Last ?? string.Empty,
                         Suffix = !string.IsNullOrEmpty(source.Suffix) 
                             ? new string[] { source.Suffix } 
-                            : null,
-                        // Add period to indicate when this name is/was used
-                        Period = new Period
-                        {
-                            Start = DateTime.UtcNow.AddYears(-10).ToString("yyyy-MM-dd") // Arbitrary start date
-                        }
+                            : null
                     }
                 },
                 
-                // Set gender - required for valid FHIR Patient resources
-                Gender = MapGender(source.Gender ?? string.Empty) ?? AdministrativeGender.Unknown,
+                // Set gender only if available
+                Gender = MapGender(source.Gender),
                 
                 // Set birth date with proper format
                 BirthDate = source.BirthDate.HasValue ? source.BirthDate.Value.ToString("yyyy-MM-ddTHH:mm:ss")?.Split('T').First() : null,
@@ -151,21 +146,21 @@ namespace Phoenix_AzureAPI.Services.FHIR
                 !string.IsNullOrEmpty(source.State) || 
                 !string.IsNullOrEmpty(source.Zip))
             {
+                var addressLines = new List<string>();
+                if (!string.IsNullOrEmpty(source.PatientAddress))
+                {
+                    addressLines.Add(source.PatientAddress);
+                }
+
                 fhirPatient.Address.Add(new Address
                 {
                     Use = Address.AddressUse.Home,
                     Type = Address.AddressType.Both,
-                    Line = !string.IsNullOrEmpty(source.PatientAddress) 
-                        ? new string[] { source.PatientAddress } 
-                        : new string[] { "Unknown" }, // Provide a default value for required field
-                    City = !string.IsNullOrEmpty(source.City) ? source.City : "Unknown", // Provide a default value for required field
-                    State = !string.IsNullOrEmpty(source.State) ? source.State : "Unknown", // Provide a default value for required field
-                    PostalCode = !string.IsNullOrEmpty(source.Zip) ? source.Zip : "00000", // Provide a default value for required field
-                    Country = "US", // Assuming US as default
-                    Period = new Period
-                    {
-                        Start = DateTime.UtcNow.AddYears(-5).ToString("yyyy-MM-dd") // Arbitrary start date
-                    }
+                    Line = addressLines.Count > 0 ? addressLines.ToArray() : null,
+                    City = !string.IsNullOrEmpty(source.City) ? source.City : null,
+                    State = !string.IsNullOrEmpty(source.State) ? source.State : null,
+                    PostalCode = !string.IsNullOrEmpty(source.Zip) ? source.Zip : null,
+                    Country = null // No country field in the source model
                 });
             }
             
@@ -305,34 +300,33 @@ namespace Phoenix_AzureAPI.Services.FHIR
                             : null,
                         Given = new string[] 
                         { 
-                            source.First ?? "Patient",
+                            source.First ?? string.Empty,
                             !string.IsNullOrEmpty(source.Middle) ? source.Middle : null
                         }.Where(n => !string.IsNullOrEmpty(n)).ToArray(),
-                        Family = source.Last ?? source.PatientID.ToString(),
+                        Family = source.Last ?? string.Empty,
                         Suffix = !string.IsNullOrEmpty(source.Suffix) 
                             ? new string[] { source.Suffix } 
-                            : null,
-                        Text = $"{source.First ?? "Patient"} {source.Last ?? source.PatientID.ToString()}"
+                            : null
                     }
                 },
                 
-                // Set gender - required for valid FHIR Patient resources
-                Gender = MapGender(source.Gender ?? string.Empty) ?? AdministrativeGender.Unknown,
+                // Set gender only if available
+                Gender = MapGender(source.Gender),
                 
                 // Set birth date with proper format
-                BirthDate = source.BirthDate.HasValue ? source.BirthDate.Value.ToString("yyyy-MM-dd") : DateTime.UtcNow.AddYears(-40).ToString("yyyy-MM-dd"),
+                BirthDate = source.BirthDate.HasValue ? source.BirthDate.Value.ToString("yyyy-MM-ddTHH:mm:ss")?.Split('T').First() : null,
                 
                 // Set contact information
-                Telecom = CreateTelecom(source),
+                Telecom = new List<ContactPoint>(),
                 
                 // Set address
-                Address = CreateAddress(source),
+                Address = new List<Address>(),
                 
                 // Set the narrative text summary (required for valid FHIR resources)
                 Text = new Narrative
                 {
                     Status = Narrative.NarrativeStatus.Generated,
-                    Div = $"<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Patient: {source.First ?? "Patient"} {source.Last ?? source.PatientID.ToString()}</p></div>"
+                    Div = $"<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Patient: {source.First} {source.Last}</p></div>"
                 },
                 
                 // Set active status
@@ -401,16 +395,21 @@ namespace Phoenix_AzureAPI.Services.FHIR
                 !string.IsNullOrEmpty(source.State) || 
                 !string.IsNullOrEmpty(source.Zip))
             {
+                var addressLines = new List<string>();
+                if (!string.IsNullOrEmpty(source.PatientAddress))
+                {
+                    addressLines.Add(source.PatientAddress);
+                }
+
                 addresses.Add(new Address
                 {
                     Use = Address.AddressUse.Home,
-                    Line = !string.IsNullOrEmpty(source.PatientAddress) 
-                        ? new string[] { source.PatientAddress } 
-                        : new string[] { "123 Main St" },
-                    City = !string.IsNullOrEmpty(source.City) ? source.City : "Anytown",
-                    State = !string.IsNullOrEmpty(source.State) ? source.State : "ST",
-                    PostalCode = !string.IsNullOrEmpty(source.Zip) ? source.Zip : "12345",
-                    Country = "USA"
+                    Type = Address.AddressType.Both,
+                    Line = addressLines.Count > 0 ? addressLines.ToArray() : null,
+                    City = !string.IsNullOrEmpty(source.City) ? source.City : null,
+                    State = !string.IsNullOrEmpty(source.State) ? source.State : null,
+                    PostalCode = !string.IsNullOrEmpty(source.Zip) ? source.Zip : null,
+                    Country = null // No country field in the source model
                 });
             }
             else
@@ -460,7 +459,7 @@ namespace Phoenix_AzureAPI.Services.FHIR
             }
             
             // Map gender
-            patient.Gender = MapGenderBack(resource.Gender);
+            patient.Gender = MapGenderToString(resource.Gender);
             
             // Map birth date
             if (DateTime.TryParse(resource.BirthDate, out DateTime birthDate))
@@ -542,28 +541,31 @@ namespace Phoenix_AzureAPI.Services.FHIR
         }
 
         /// <summary>
-        /// Maps a string gender to FHIR AdministrativeGender
+        /// Maps a string gender to FHIR AdministrativeGender enum
         /// </summary>
         private AdministrativeGender? MapGender(string gender)
         {
             if (string.IsNullOrEmpty(gender))
                 return null;
                 
-            return gender.ToLower() switch
+            return gender.ToLower().Trim() switch
             {
                 "male" or "m" => AdministrativeGender.Male,
                 "female" or "f" => AdministrativeGender.Female,
                 "other" or "o" => AdministrativeGender.Other,
-                _ => AdministrativeGender.Unknown
+                _ => AdministrativeGender.Unknown // Default to Unknown instead of null for FHIR compatibility
             };
         }
 
         /// <summary>
-        /// Maps a FHIR AdministrativeGender back to a string
+        /// Maps FHIR AdministrativeGender enum to a gender string
         /// </summary>
-        private string MapGenderBack(AdministrativeGender? gender)
+        private string MapGenderToString(AdministrativeGender? gender)
         {
-            return gender switch
+            if (gender == null)
+                return null;
+                
+            return gender.Value switch
             {
                 AdministrativeGender.Male => "Male",
                 AdministrativeGender.Female => "Female",
