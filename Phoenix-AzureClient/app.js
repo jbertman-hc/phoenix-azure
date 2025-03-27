@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
         viewFhirBtn.addEventListener('click', (e) => {
             e.preventDefault();
             if (currentPatientId) {
-                window.location.href = `fhir-explorer.html?patientId=${currentPatientId}`;
+                window.location.href = `fhir-explorer.html?resourceType=Patient&patientId=${currentPatientId}`;
             }
         });
     } else {

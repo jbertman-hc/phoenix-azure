@@ -73,9 +73,63 @@ namespace Phoenix_AzureAPI.Services.FHIR
         {
             try
             {
-                // First try to parse the resource using the FhirJsonParser
-                var parser = new FhirJsonParser();
-                var resource = parser.Parse<Resource>(json);
+                _logger.LogInformation("Parsing FHIR resource from JSON");
+                
+                // First try to determine the resource type from the JSON
+                string resourceType = null;
+                try
+                {
+                    var jsonDoc = System.Text.Json.JsonDocument.Parse(json);
+                    if (jsonDoc.RootElement.TryGetProperty("resourceType", out var resourceTypeElement))
+                    {
+                        resourceType = resourceTypeElement.GetString();
+                        _logger.LogInformation($"Detected resource type from JSON: {resourceType}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error pre-parsing JSON to determine resource type");
+                }
+                
+                // Create a parser with appropriate settings
+                var parser = new FhirJsonParser(new ParserSettings
+                {
+                    AcceptUnknownMembers = true,
+                    AllowUnrecognizedEnums = true,
+                    PermissiveParsing = true
+                });
+                
+                // Parse the resource based on detected type
+                Resource resource;
+                if (!string.IsNullOrEmpty(resourceType))
+                {
+                    switch (resourceType)
+                    {
+                        case "Bundle":
+                            resource = parser.Parse<Bundle>(json);
+                            break;
+                        case "Patient":
+                            resource = parser.Parse<Patient>(json);
+                            break;
+                        case "CapabilityStatement":
+                            resource = parser.Parse<CapabilityStatement>(json);
+                            break;
+                        case "OperationOutcome":
+                            resource = parser.Parse<OperationOutcome>(json);
+                            break;
+                        default:
+                            // For unknown types, try generic parsing
+                            resource = parser.Parse<Resource>(json);
+                            break;
+                    }
+                }
+                else
+                {
+                    // If type couldn't be determined, try generic parsing
+                    resource = parser.Parse<Resource>(json);
+                }
+                
+                _logger.LogInformation($"Successfully parsed resource of type: {resource.TypeName}");
                 
                 // If it's a Bundle, pre-process any Patient resources to fix date formats
                 if (resource is Bundle bundle && bundle.Entry != null)

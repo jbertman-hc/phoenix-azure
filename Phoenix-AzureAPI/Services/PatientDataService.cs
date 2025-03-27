@@ -42,7 +42,7 @@ namespace Phoenix_AzureAPI.Services
             try
             {
                 var client = _httpClientFactory.CreateClient();
-                // Use the correct endpoint for patient data
+                // First try the direct Patient endpoint
                 var url = $"{_apiBaseUrl}/Patient/{id}";
                 
                 _logger.LogInformation($"Fetching patient from: {url}");
@@ -57,9 +57,76 @@ namespace Phoenix_AzureAPI.Services
                     return patient ?? throw new Exception($"Failed to deserialize patient with ID {id}");
                 }
                 
+                // If direct endpoint fails, try to find the patient in the addendum data
+                _logger.LogInformation($"Patient not found at direct endpoint, trying addendum lookup for ID {id}");
+                
+                // Loop through addendum entries to find matching patient
+                for (int i = 1; i <= 25; i++)
+                {
+                    try
+                    {
+                        var addendumUrl = $"{_apiBaseUrl}/addendum/{i}";
+                        _logger.LogInformation($"Checking addendum {i} for patient {id}");
+                        
+                        var addendumResponse = await client.GetAsync(addendumUrl);
+                        
+                        if (addendumResponse.IsSuccessStatusCode)
+                        {
+                            var addendumContent = await addendumResponse.Content.ReadAsStringAsync();
+                            
+                            // Check if this contains patient data
+                            if (addendumContent.Contains("patID") && addendumContent.Contains("patientName"))
+                            {
+                                // Parse the addendum data
+                                try {
+                                    var addendumData = JsonSerializer.Deserialize<JsonDocument>(addendumContent, _jsonOptions).RootElement;
+                                    
+                                    // Check if the required properties exist
+                                    if (addendumData.TryGetProperty("patID", out JsonElement patIdElement) && 
+                                        addendumData.TryGetProperty("patientName", out JsonElement patientNameElement))
+                                    {
+                                        var patId = patIdElement.GetInt32();
+                                        
+                                        // If this is the patient we're looking for
+                                        if (patId == id)
+                                        {
+                                            var patientName = patientNameElement.GetString() ?? "";
+                                            
+                                            // Split the name into parts
+                                            string[] nameParts = patientName?.Split(' ') ?? new string[0];
+                                            string firstName = nameParts.Length > 0 ? nameParts[0] : "";
+                                            string lastName = nameParts.Length > 1 ? string.Join(" ", nameParts.Skip(1)) : "";
+                                            
+                                            // Create a patient object from the addendum data
+                                            return new Models.Patient
+                                            {
+                                                PatientID = patId,
+                                                First = firstName,
+                                                Last = lastName,
+                                                // Set a default birthdate if needed for FHIR
+                                                BirthDate = DateTime.UtcNow.AddYears(-40)
+                                            };
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, $"Error parsing addendum {i} while looking for patient {id}");
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, $"Error processing addendum {i} while looking for patient {id}");
+                        // Continue with the next addendum
+                    }
+                }
+                
+                // If we get here, the patient wasn't found
                 if (response.StatusCode == HttpStatusCode.NotFound)
                 {
-                    // Try to get a list of all patients to see what IDs are available
+                    // Try to get a list of all patients to show available IDs in the error
                     var allPatients = await GetAllPatientsAsync();
                     var availableIds = string.Join(", ", allPatients.Select(p => p.PatientID));
                     throw new Exception($"Patient with ID {id} not found. Available IDs: {availableIds}");
@@ -125,28 +192,36 @@ namespace Phoenix_AzureAPI.Services
                             if (addendumContent.Contains("patID") && addendumContent.Contains("patientName"))
                             {
                                 // Create a patient from the addendum data
-                                var addendumData = JsonSerializer.Deserialize<dynamic>(addendumContent, _jsonOptions);
-                                
-                                if (addendumData != null)
-                                {
-                                    var patId = addendumData.GetProperty("patID").GetInt32();
-                                    var patientName = addendumData.GetProperty("patientName").GetString();
+                                try {
+                                    var addendumData = JsonSerializer.Deserialize<JsonDocument>(addendumContent, _jsonOptions).RootElement;
                                     
-                                    // Split the name into parts
-                                    string[] nameParts = patientName?.Split(' ') ?? new string[0];
-                                    string firstName = nameParts.Length > 0 ? nameParts[0] : "";
-                                    string lastName = nameParts.Length > 1 ? string.Join(" ", nameParts.Skip(1)) : "";
-                                    
-                                    // Create a new patient
-                                    var patient = new Models.Patient
+                                    // Check if the required properties exist
+                                    if (addendumData.TryGetProperty("patID", out JsonElement patIdElement) && 
+                                        addendumData.TryGetProperty("patientName", out JsonElement patientNameElement))
                                     {
-                                        PatientID = patId,
-                                        First = firstName,
-                                        Last = lastName
-                                    };
-                                    
-                                    patients.Add(patient);
-                                    _logger.LogInformation($"Added patient: {patientName} (ID: {patId})");
+                                        var patId = patIdElement.GetInt32();
+                                        var patientName = patientNameElement.GetString() ?? "";
+                                        
+                                        // Split the name into parts
+                                        string[] nameParts = patientName?.Split(' ') ?? new string[0];
+                                        string firstName = nameParts.Length > 0 ? nameParts[0] : "";
+                                        string lastName = nameParts.Length > 1 ? string.Join(" ", nameParts.Skip(1)) : "";
+                                        
+                                        // Create a new patient
+                                        var patient = new Models.Patient
+                                        {
+                                            PatientID = patId,
+                                            First = firstName,
+                                            Last = lastName
+                                        };
+                                        
+                                        patients.Add(patient);
+                                        _logger.LogInformation($"Added patient: {patientName} (ID: {patId})");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, $"Error parsing addendum {i}");
                                 }
                             }
                         }

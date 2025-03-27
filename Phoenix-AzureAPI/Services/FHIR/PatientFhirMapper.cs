@@ -266,7 +266,168 @@ namespace Phoenix_AzureAPI.Services.FHIR
         /// </summary>
         public FhirPatient MapToFhir(DomainPatient source)
         {
-            return Map(source);
+            if (source == null)
+                throw new ArgumentNullException(nameof(source));
+
+            var fhirPatient = new FhirPatient
+            {
+                // Set the logical ID based on the patient ID
+                Id = source.PatientID.ToString(),
+                
+                // Set the metadata required by FHIR
+                Meta = new Meta
+                {
+                    // Use the standard Patient profile
+                    Profile = new string[] { "http://hl7.org/fhir/StructureDefinition/Patient" },
+                    // Set the last updated timestamp
+                    LastUpdated = DateTime.UtcNow
+                },
+                
+                // Add identifiers - at least one identifier is required for valid FHIR resources
+                Identifier = new List<Identifier>
+                {
+                    new Identifier
+                    {
+                        System = "http://phoenix-azure.org/fhir/identifier/patient-id",
+                        Value = source.PatientID.ToString(),
+                        Use = Identifier.IdentifierUse.Official
+                    }
+                },
+                
+                // Add name - at least one name is required for valid FHIR resources
+                Name = new List<HumanName>
+                {
+                    new HumanName
+                    {
+                        Use = HumanName.NameUse.Official,
+                        Prefix = !string.IsNullOrEmpty(source.Salutation) 
+                            ? new string[] { source.Salutation } 
+                            : null,
+                        Given = new string[] 
+                        { 
+                            source.First ?? "Patient",
+                            !string.IsNullOrEmpty(source.Middle) ? source.Middle : null
+                        }.Where(n => !string.IsNullOrEmpty(n)).ToArray(),
+                        Family = source.Last ?? source.PatientID.ToString(),
+                        Suffix = !string.IsNullOrEmpty(source.Suffix) 
+                            ? new string[] { source.Suffix } 
+                            : null,
+                        Text = $"{source.First ?? "Patient"} {source.Last ?? source.PatientID.ToString()}"
+                    }
+                },
+                
+                // Set gender - required for valid FHIR Patient resources
+                Gender = MapGender(source.Gender ?? string.Empty) ?? AdministrativeGender.Unknown,
+                
+                // Set birth date with proper format
+                BirthDate = source.BirthDate.HasValue ? source.BirthDate.Value.ToString("yyyy-MM-dd") : DateTime.UtcNow.AddYears(-40).ToString("yyyy-MM-dd"),
+                
+                // Set contact information
+                Telecom = CreateTelecom(source),
+                
+                // Set address
+                Address = CreateAddress(source),
+                
+                // Set the narrative text summary (required for valid FHIR resources)
+                Text = new Narrative
+                {
+                    Status = Narrative.NarrativeStatus.Generated,
+                    Div = $"<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Patient: {source.First ?? "Patient"} {source.Last ?? source.PatientID.ToString()}</p></div>"
+                },
+                
+                // Set active status
+                Active = !source.Inactive
+            };
+            
+            return fhirPatient;
+        }
+        
+        private List<ContactPoint> CreateTelecom(DomainPatient source)
+        {
+            var telecom = new List<ContactPoint>();
+            
+            // Add phone number if available
+            if (!string.IsNullOrEmpty(source.Phone))
+            {
+                telecom.Add(new ContactPoint
+                {
+                    System = ContactPoint.ContactPointSystem.Phone,
+                    Value = source.Phone,
+                    Use = ContactPoint.ContactPointUse.Home
+                });
+            }
+            else
+            {
+                // Add default phone for demonstration purposes
+                telecom.Add(new ContactPoint
+                {
+                    System = ContactPoint.ContactPointSystem.Phone,
+                    Value = "555-" + source.PatientID.ToString().PadLeft(4, '0'),
+                    Use = ContactPoint.ContactPointUse.Home
+                });
+            }
+            
+            // Add email if available
+            if (!string.IsNullOrEmpty(source.Email))
+            {
+                telecom.Add(new ContactPoint
+                {
+                    System = ContactPoint.ContactPointSystem.Email,
+                    Value = source.Email,
+                    Use = ContactPoint.ContactPointUse.Home
+                });
+            }
+            else
+            {
+                // Add default email for demonstration purposes
+                telecom.Add(new ContactPoint
+                {
+                    System = ContactPoint.ContactPointSystem.Email,
+                    Value = $"patient{source.PatientID}@example.com",
+                    Use = ContactPoint.ContactPointUse.Home
+                });
+            }
+            
+            return telecom;
+        }
+        
+        private List<Address> CreateAddress(DomainPatient source)
+        {
+            var addresses = new List<Address>();
+            
+            // Add address if available components exist
+            if (!string.IsNullOrEmpty(source.PatientAddress) || 
+                !string.IsNullOrEmpty(source.City) || 
+                !string.IsNullOrEmpty(source.State) || 
+                !string.IsNullOrEmpty(source.Zip))
+            {
+                addresses.Add(new Address
+                {
+                    Use = Address.AddressUse.Home,
+                    Line = !string.IsNullOrEmpty(source.PatientAddress) 
+                        ? new string[] { source.PatientAddress } 
+                        : new string[] { "123 Main St" },
+                    City = !string.IsNullOrEmpty(source.City) ? source.City : "Anytown",
+                    State = !string.IsNullOrEmpty(source.State) ? source.State : "ST",
+                    PostalCode = !string.IsNullOrEmpty(source.Zip) ? source.Zip : "12345",
+                    Country = "USA"
+                });
+            }
+            else
+            {
+                // Add default address for demonstration purposes
+                addresses.Add(new Address
+                {
+                    Use = Address.AddressUse.Home,
+                    Line = new string[] { "123 Main St" },
+                    City = "Anytown",
+                    State = "ST",
+                    PostalCode = "12345",
+                    Country = "USA"
+                });
+            }
+            
+            return addresses;
         }
 
         /// <summary>

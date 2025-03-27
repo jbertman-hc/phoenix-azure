@@ -365,14 +365,24 @@ async function validateCurrentResource() {
         
         // Prepare the request
         const url = `${FHIR_API_BASE_URL}/$validate`;
+        console.log('Sending validation request to:', url);
+        
+        // Make sure the resource has a resourceType property
+        if (!currentResource.resourceType) {
+            console.error('Resource is missing resourceType property');
+            showAlert('Error: Resource is missing resourceType property', 'danger');
+            return;
+        }
+        
+        console.log(`Validating ${currentResource.resourceType} resource`);
+        
+        // Send the resource directly without wrapping it
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/fhir+json'
             },
-            body: JSON.stringify({
-                resourceToValidate: currentResource
-            })
+            body: JSON.stringify(currentResource)
         });
         
         if (!response.ok) {

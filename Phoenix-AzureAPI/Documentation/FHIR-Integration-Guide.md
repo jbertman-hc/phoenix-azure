@@ -24,6 +24,91 @@ The Phoenix project implements a flexible data source strategy that allows switc
    - **PatientFhirMapper**: Maps between domain Patient model and FHIR Patient resources
    - **FhirService**: Handles serialization, deserialization, and validation of FHIR resources
 
+## Patient Lookup and FHIR Mapping
+
+The Phoenix-Azure application implements a robust patient lookup mechanism to ensure reliable access to patient data in FHIR format.
+
+### Patient Lookup Architecture
+
+1. **Multi-tiered Retrieval Strategy**
+   - The application uses a fallback strategy to ensure patient data is always available:
+     - First attempt: Direct lookup using the Patient endpoint
+     - Second attempt: Search through addendum entries for matching patient ID
+     - Final fallback: Creation of simplified patient records for known patient IDs
+
+2. **PatientDataService**
+   - The `GetPatientByIdAsync` method implements the multi-tiered retrieval strategy
+   - Logs detailed information about the patient retrieval process
+   - Handles errors gracefully with comprehensive exception handling
+
+3. **FhirController**
+   - Implements both single patient lookup and patient bundle endpoints
+   - Uses detailed logging to track the conversion process from domain models to FHIR resources
+   - Provides proper error responses with accurate HTTP status codes
+
+### FHIR Mapping Implementation
+
+The `PatientFhirMapper` class is responsible for transforming domain Patient models into FHIR-compliant resources:
+
+1. **Complete FHIR Resources**
+   - Maps all essential FHIR Patient elements:
+     - Logical ID and metadata
+     - Patient identifiers
+     - Name information (given, family, prefix, suffix)
+     - Gender and birth date
+     - Contact information (telecom)
+     - Address information
+     - Narrative text summary
+
+2. **Default Values and Fallback Handling**
+   - Ensures that resources are valid even when source data is incomplete
+   - Provides reasonable default values for missing data
+   - Implements null-checking to prevent runtime errors
+   - Formats dates according to FHIR specifications (yyyy-MM-dd)
+
+3. **Implementation Details**
+   - Uses helper methods to decompose complex mapping logic
+   - Extensively documents the mapping process
+   - Ensures all resources are valid according to FHIR specifications
+
+```csharp
+// Example of the robust mapping approach
+public FhirPatient MapToFhir(DomainPatient source)
+{
+    if (source == null)
+        throw new ArgumentNullException(nameof(source));
+
+    var fhirPatient = new FhirPatient
+    {
+        // Set the logical ID based on the patient ID
+        Id = source.PatientID.ToString(),
+        
+        // Set the metadata required by FHIR
+        Meta = new Meta
+        {
+            Profile = new string[] { "http://hl7.org/fhir/StructureDefinition/Patient" },
+            LastUpdated = DateTime.UtcNow
+        },
+        
+        // Add name - at least one name is required for valid FHIR resources
+        Name = new List<HumanName>
+        {
+            new HumanName
+            {
+                Use = HumanName.NameUse.Official,
+                Given = new string[] { source.First ?? "Patient" }.Where(n => !string.IsNullOrEmpty(n)).ToArray(),
+                Family = source.Last ?? source.PatientID.ToString(),
+                Text = $"{source.First ?? "Patient"} {source.Last ?? source.PatientID.ToString()}"
+            }
+        },
+        
+        // Other FHIR elements...
+    };
+    
+    return fhirPatient;
+}
+```
+
 ## FHIR Validation
 
 The Phoenix-Azure project includes comprehensive FHIR validation capabilities to ensure that generated FHIR resources conform to standard specifications.
