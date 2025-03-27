@@ -74,7 +74,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "In Progress",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for next implementation phase"
                 },
                 new
@@ -83,7 +83,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "Planned",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for implementation after Practitioner"
                 },
                 new
@@ -92,7 +92,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "Planned",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for implementation after Organization"
                 },
                 new
@@ -101,7 +101,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "Planned",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for implementation after Location"
                 },
                 new
@@ -110,7 +110,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "Planned",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for implementation after AllergyIntolerance"
                 },
                 new
@@ -119,7 +119,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "Planned",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for implementation after Condition"
                 },
                 new
@@ -128,7 +128,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "Planned",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for implementation after MedicationStatement"
                 },
                 new
@@ -137,7 +137,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "Planned",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for later implementation phase"
                 },
                 new
@@ -146,7 +146,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "Planned",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for later implementation phase"
                 },
                 new
@@ -155,7 +155,7 @@ namespace Phoenix_FHIR_API.Controllers
                     Status = "Planned",
                     Completeness = 0,
                     Operations = new string[] { },
-                    LastUpdated = null,
+                    LastUpdated = string.Empty,
                     Notes = "Planned for later implementation phase"
                 },
                 new
@@ -389,7 +389,7 @@ namespace Phoenix_FHIR_API.Controllers
                         </div>
                     </td>
                     <td>{string.Join(", ", resource.Operations)}</td>
-                    <td>{resource.LastUpdated ?? "-"}</td>
+                    <td>{(resource.LastUpdated != string.Empty ? resource.LastUpdated : "-")}</td>
                     <td>{resource.Notes}</td>
                 </tr>";
             }

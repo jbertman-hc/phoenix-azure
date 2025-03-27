@@ -2,6 +2,7 @@ using Hl7.Fhir.Model;
 using Phoenix_FHIR_API.Models;
 using Phoenix_FHIR_API.Services;
 using Phoenix_FHIR_API.Validators;
+using System.Collections.Generic;
 
 namespace Phoenix_FHIR_API.Mappers
 {
@@ -39,7 +40,9 @@ namespace Phoenix_FHIR_API.Mappers
                 Id = source.patientID.ToString(),
                 Meta = new Meta
                 {
-                    LastUpdated = source.dateLastTouched ?? DateTime.UtcNow,
+                    LastUpdated = source.dateLastTouched.HasValue 
+                        ? new DateTimeOffset(source.dateLastTouched.Value) 
+                        : DateTimeOffset.UtcNow,
                     VersionId = "1"
                 },
                 Identifier = new List<Identifier>
@@ -70,7 +73,9 @@ namespace Phoenix_FHIR_API.Mappers
                             : null,
                         Period = new Period
                         {
-                            Start = source.dateRowAdded
+                            Start = source.dateRowAdded.HasValue 
+                                ? new FhirDateTime(new DateTimeOffset(source.dateRowAdded.Value)).ToString()
+                                : null
                         }
                     }
                 };
@@ -84,7 +89,9 @@ namespace Phoenix_FHIR_API.Mappers
                         Given = new List<string> { source.preferredName },
                         Period = new Period
                         {
-                            Start = source.dateRowAdded
+                            Start = source.dateRowAdded.HasValue 
+                                ? new FhirDateTime(new DateTimeOffset(source.dateRowAdded.Value)).ToString()
+                                : null
                         }
                     });
                 }
@@ -187,12 +194,12 @@ namespace Phoenix_FHIR_API.Mappers
 
                 if (!string.IsNullOrEmpty(source.address1))
                 {
-                    address.Line.Add(source.address1);
+                    address.Line = address.Line.Concat(new[] { source.address1 }).ToList();
                 }
 
                 if (!string.IsNullOrEmpty(source.address2))
                 {
-                    address.Line.Add(source.address2);
+                    address.Line = address.Line.Concat(new[] { source.address2 }).ToList();
                 }
 
                 patient.Address = new List<Address> { address };
@@ -299,6 +306,7 @@ namespace Phoenix_FHIR_API.Mappers
                     }
                 };
                 
+                patient.Extension = patient.Extension ?? new List<Extension>();
                 patient.Extension.Add(raceExtension);
             }
 
@@ -317,6 +325,7 @@ namespace Phoenix_FHIR_API.Mappers
                     }
                 };
                 
+                patient.Extension = patient.Extension ?? new List<Extension>();
                 patient.Extension.Add(ethnicityExtension);
             }
 
@@ -339,7 +348,9 @@ namespace Phoenix_FHIR_API.Mappers
             var demographics = new DemographicsDomain
             {
                 patientID = int.Parse(source.Id),
-                dateLastTouched = source.Meta?.LastUpdated ?? DateTime.UtcNow,
+                dateLastTouched = source.Meta?.LastUpdated != null ? 
+                    source.Meta.LastUpdated.Value.DateTime : 
+                    DateTime.UtcNow,
                 dateRowAdded = DateTime.UtcNow
             };
 

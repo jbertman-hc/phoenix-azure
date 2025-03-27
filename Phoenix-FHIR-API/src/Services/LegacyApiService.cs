@@ -31,15 +31,50 @@ namespace Phoenix_FHIR_API.Services
         public async Task<DemographicsDomain?> GetPatientByIdAsync(int patientId)
         {
             var url = $"{_baseApiUrl}Demographics/{patientId}";
-            var response = await _httpClient.GetAsync(url);
+            Console.WriteLine($"Requesting URL: {url}");
             
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<DemographicsDomain>(content, _jsonOptions);
+                var response = await _httpClient.GetAsync(url);
+                Console.WriteLine($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    // Check if the response is 204 No Content
+                    if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
+                    {
+                        Console.WriteLine($"No content returned for patient ID {patientId}");
+                        return null;
+                    }
+                    
+                    var content = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"Response content: {content}");
+                    
+                    if (string.IsNullOrEmpty(content))
+                    {
+                        Console.WriteLine("Response content is empty");
+                        return null;
+                    }
+                    
+                    var result = JsonSerializer.Deserialize<DemographicsDomain>(content, _jsonOptions);
+                    Console.WriteLine($"Deserialized patient: {result?.patientID}, {result?.firstName} {result?.lastName}");
+                    return result;
+                }
+                else
+                {
+                    Console.WriteLine($"Error response: {await response.Content.ReadAsStringAsync()}");
+                    return null;
+                }
             }
-            
-            return null;
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Exception occurred: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                }
+                return null;
+            }
         }
 
         /// <summary>

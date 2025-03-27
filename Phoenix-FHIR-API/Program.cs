@@ -37,13 +37,7 @@ builder.Services.AddSingleton<ILegacyApiService, LegacyApiService>();
 
 // Register mappers
 builder.Services.AddSingleton<IPatientFhirMapper, PatientFhirMapper>();
-builder.Services.AddSingleton<IPractitionerFhirMapper, PractitionerFhirMapper>();
-builder.Services.AddSingleton<IOrganizationFhirMapper, OrganizationFhirMapper>();
-builder.Services.AddSingleton<ILocationFhirMapper, LocationFhirMapper>();
-builder.Services.AddSingleton<IAllergyIntoleranceFhirMapper, AllergyIntoleranceFhirMapper>();
-builder.Services.AddSingleton<IConditionFhirMapper, ConditionFhirMapper>();
-builder.Services.AddSingleton<IMedicationStatementFhirMapper, MedicationStatementFhirMapper>();
-builder.Services.AddSingleton<IDocumentReferenceFhirMapper, DocumentReferenceFhirMapper>();
+// Other mappers will be added as they are implemented
 
 // Register validators
 builder.Services.AddSingleton<IFhirResourceValidator, FhirResourceValidator>();
@@ -57,7 +51,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Temporarily comment out HTTPS redirection to allow testing with HTTP
+// app.UseHttpsRedirection();
 app.UseCors("AllowAll");
 app.UseAuthorization();
 app.MapControllers();
