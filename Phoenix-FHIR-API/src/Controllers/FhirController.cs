@@ -5,6 +5,7 @@ using Phoenix_FHIR_API.Mappers;
 using Phoenix_FHIR_API.Services;
 using Phoenix_FHIR_API.Validators;
 using Swashbuckle.AspNetCore.Annotations;
+using Newtonsoft.Json.Linq;
 
 namespace Phoenix_FHIR_API.Controllers
 {
@@ -386,76 +387,120 @@ namespace Phoenix_FHIR_API.Controllers
                 };
 
                 // Determine the resource type and validate
-                var resource = validationRequest.ResourceToValidate;
-                var resourceType = resource.GetType().Name;
-
-                // Validate the resource
-                bool isValid = true;
-                IEnumerable<string> validationIssues = new List<string>();
-
-                // Handle different resource types
-                if (resource is Patient patient)
+                var resourceJson = validationRequest.ResourceToValidate;
+                
+                try
                 {
-                    isValid = _validator.Validate(patient, out validationIssues);
-                }
-                else if (resource is Bundle bundle)
-                {
-                    // For bundles, validate each entry
-                    List<string> allIssues = new List<string>();
-                    foreach (var entry in bundle.Entry)
+                    // Use FhirJsonParser to parse the resource
+                    var parser = new FhirJsonParser();
+                    Resource resource;
+                    
+                    if (resourceJson is JObject jsonObject)
                     {
-                        if (entry.Resource is Patient bundlePatient)
-                        {
-                            IEnumerable<string> patientIssues;
-                            bool patientValid = _validator.Validate(bundlePatient, out patientIssues);
-                            if (!patientValid)
-                            {
-                                isValid = false;
-                                allIssues.AddRange(patientIssues.Select(issue => $"Patient {bundlePatient.Id}: {issue}"));
-                            }
-                        }
-                        // Add more resource types as they are implemented
+                        // Convert JObject to string and parse
+                        string jsonString = jsonObject.ToString();
+                        _logger.LogInformation("Parsing resource from JSON: {Json}", jsonString.Substring(0, Math.Min(200, jsonString.Length)));
+                        resource = parser.Parse<Resource>(jsonString);
                     }
-                    validationIssues = allIssues;
-                }
-                else
-                {
-                    // For unsupported resource types
-                    outcome.Issue.Add(new OperationOutcome.IssueComponent
+                    else if (resourceJson is string jsonString)
                     {
-                        Severity = OperationOutcome.IssueSeverity.Warning,
-                        Code = OperationOutcome.IssueType.NotSupported,
-                        Details = new CodeableConcept
-                        {
-                            Text = $"Validation for resource type {resourceType} is not yet supported"
-                        }
-                    });
-                }
+                        // Parse directly from string
+                        _logger.LogInformation("Parsing resource from string: {Json}", jsonString.Substring(0, Math.Min(200, jsonString.Length)));
+                        resource = parser.Parse<Resource>(jsonString);
+                    }
+                    else
+                    {
+                        // For other types, try to convert to JObject first
+                        var serializer = new FhirJsonSerializer();
+                        string serialized = serializer.SerializeToString(resourceJson);
+                        _logger.LogInformation("Parsing resource from serialized object: {Json}", serialized.Substring(0, Math.Min(200, serialized.Length)));
+                        resource = parser.Parse<Resource>(serialized);
+                    }
+                    
+                    var resourceType = resource.ResourceType.ToString();
+                    _logger.LogInformation("Resource type detected: {ResourceType}", resourceType);
 
-                // Add validation issues to the outcome
-                foreach (var issue in validationIssues)
+                    // Validate the resource
+                    bool isValid = true;
+                    IEnumerable<string> validationIssues = new List<string>();
+
+                    // Handle different resource types
+                    if (resource is Patient patient)
+                    {
+                        isValid = _validator.Validate(patient, out validationIssues);
+                    }
+                    else if (resource is Bundle bundle)
+                    {
+                        // For bundles, validate each entry
+                        List<string> allIssues = new List<string>();
+                        foreach (var entry in bundle.Entry)
+                        {
+                            if (entry.Resource is Patient bundlePatient)
+                            {
+                                IEnumerable<string> patientIssues;
+                                bool patientValid = _validator.Validate(bundlePatient, out patientIssues);
+                                if (!patientValid)
+                                {
+                                    isValid = false;
+                                    allIssues.AddRange(patientIssues.Select(issue => $"Patient {bundlePatient.Id}: {issue}"));
+                                }
+                            }
+                            // Add more resource types as they are implemented
+                        }
+                        validationIssues = allIssues;
+                    }
+                    else
+                    {
+                        // For unsupported resource types
+                        outcome.Issue.Add(new OperationOutcome.IssueComponent
+                        {
+                            Severity = OperationOutcome.IssueSeverity.Warning,
+                            Code = OperationOutcome.IssueType.NotSupported,
+                            Details = new CodeableConcept
+                            {
+                                Text = $"Validation for resource type {resourceType} is not yet supported"
+                            }
+                        });
+                    }
+
+                    // Add validation issues to the outcome
+                    foreach (var issue in validationIssues)
+                    {
+                        outcome.Issue.Add(new OperationOutcome.IssueComponent
+                        {
+                            Severity = OperationOutcome.IssueSeverity.Error,
+                            Code = OperationOutcome.IssueType.Invalid,
+                            Details = new CodeableConcept
+                            {
+                                Text = issue
+                            }
+                        });
+                    }
+
+                    // If no issues were found, add a success message
+                    if (outcome.Issue.Count == 0)
+                    {
+                        outcome.Issue.Add(new OperationOutcome.IssueComponent
+                        {
+                            Severity = OperationOutcome.IssueSeverity.Information,
+                            Code = OperationOutcome.IssueType.Informational,
+                            Details = new CodeableConcept
+                            {
+                                Text = $"Resource validation successful"
+                            }
+                        });
+                    }
+                }
+                catch (Exception ex)
                 {
+                    _logger.LogError(ex, "Error parsing or validating resource");
                     outcome.Issue.Add(new OperationOutcome.IssueComponent
                     {
                         Severity = OperationOutcome.IssueSeverity.Error,
                         Code = OperationOutcome.IssueType.Invalid,
                         Details = new CodeableConcept
                         {
-                            Text = issue
-                        }
-                    });
-                }
-
-                // If no issues were found, add a success message
-                if (outcome.Issue.Count == 0)
-                {
-                    outcome.Issue.Add(new OperationOutcome.IssueComponent
-                    {
-                        Severity = OperationOutcome.IssueSeverity.Information,
-                        Code = OperationOutcome.IssueType.Informational,
-                        Details = new CodeableConcept
-                        {
-                            Text = $"Resource validation successful"
+                            Text = $"Error parsing or validating resource: {ex.Message}"
                         }
                     });
                 }
@@ -478,6 +523,6 @@ namespace Phoenix_FHIR_API.Controllers
         /// <summary>
         /// The resource to validate
         /// </summary>
-        public Resource? ResourceToValidate { get; set; }
+        public object? ResourceToValidate { get; set; }
     }
 }

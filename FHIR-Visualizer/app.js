@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
         serverUrl: 'http://localhost:5301/api',
         currentResourceType: 'Patient',
         selectedResourceId: null,
+        selectedResource: null,
         backendInfo: {
             apiUrl: 'https://apiserviceswin20250318.azurewebsites.net/api',
             dataSource: 'Azure SQL Database',
@@ -28,7 +29,8 @@ document.addEventListener('DOMContentLoaded', function() {
         validationLoading: document.getElementById('validation-loading'),
         validateResourceBtn: document.getElementById('validate-resource-btn'),
         validateResourceContainer: document.getElementById('validate-resource-container'),
-        resourceValidationResults: document.getElementById('resource-validation-results')
+        resourceValidationResults: document.getElementById('resource-validation-results'),
+        externalValidatorBtn: document.getElementById('external-validator-btn')
     };
 
     // Initialize UI
@@ -62,6 +64,31 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update current resource type and load resources
             config.currentResourceType = resourceType;
             loadResources(resourceType);
+        });
+    });
+
+    elements.externalValidatorBtn.addEventListener('click', () => {
+        if (!config.selectedResource) {
+            alert('Please select a resource first');
+            return;
+        }
+        
+        // Open the HAPI FHIR Validator in a new tab
+        const validatorUrl = 'https://validator.fhir.org/';
+        const validatorWindow = window.open(validatorUrl, '_blank');
+        
+        // Create a message to guide the user
+        const resourceJson = JSON.stringify(config.selectedResource, null, 2);
+        alert('The FHIR Validator will open in a new tab.\n\n' +
+              'To validate your resource:\n' +
+              '1. Select "Validate Resource" from the left menu\n' +
+              '2. Paste your resource in the text area\n' +
+              '3. Click "Validate"\n\n' +
+              'The resource JSON has been copied to your clipboard.');
+        
+        // Copy the resource JSON to clipboard
+        navigator.clipboard.writeText(resourceJson).catch(err => {
+            console.error('Failed to copy resource to clipboard:', err);
         });
     });
 
@@ -148,6 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         );
                         
                         if (resourceEntry) {
+                            config.selectedResource = resourceEntry.resource;
                             displayResourceDetails(resourceEntry.resource);
                         } else {
                             console.error('Resource not found in bundle');
