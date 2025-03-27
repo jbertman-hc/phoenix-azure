@@ -1,32 +1,87 @@
-# Phoenix FHIR Transformation Layer
+# Phoenix Healthcare Interoperability Platform
 
-## Project Vision
+## Project Overview
 
-This project aims to create a comprehensive transformation layer that converts legacy healthcare data (defined in our swagger.json) into fully compliant FHIR R4 resources for use in a presentation-only layer. The transformation layer serves as a bridge between our existing data sources and modern healthcare applications, enabling seamless integration with FHIR-compatible systems without modifying the underlying data storage.
+The Phoenix Healthcare Interoperability Platform is a comprehensive solution designed to transform legacy healthcare data into FHIR-compliant resources, enabling seamless integration with modern healthcare systems. This repository contains multiple components that work together to retrieve, transform, and present healthcare data in standardized formats.
 
-## Core Objectives
+## Repository Structure
 
-1. **Complete FHIR R4 Resource Mapping**: Transform all relevant legacy healthcare endpoints (defined in swagger.json) into standard FHIR R4 resources using the Firely SDK.
+The repository consists of several key components:
 
-2. **Real-Time Transformation**: Enable on-the-fly conversion of data between the legacy system and FHIR format without storing duplicate data.
+### 1. Phoenix-FHIR-API
 
-3. **Presentation Layer Support**: Provide a clean, consistent API that can be consumed by a presentation-only layer, allowing for modern UI development without direct knowledge of the legacy data structures.
+A standards-compliant FHIR R4 API that serves as the transformation layer between legacy data sources and FHIR-compatible systems.
 
-4. **FHIR Compliance**: Ensure all transformed resources fully comply with FHIR R4 standards through rigorous validation.
+**Key Features:**
+- Retrieves real patient data from the Azure backend using multiple strategies
+- Transforms legacy data models into standard FHIR R4 resources
+- Implements comprehensive mapping between SQL database fields and FHIR resources
+- Provides FHIR-compliant RESTful endpoints
+- Validates resources against FHIR standards
+- Uses the Firely SDK (Hl7.Fhir.R4) for FHIR implementation
 
-## Multiple Tier Architecture
+**Implementation Details:**
+- **Controllers**: Handle incoming requests and return appropriate FHIR resources
+  - `PatientController`: Manages patient-related requests and transformations
+  - `FhirController`: Provides general FHIR functionality and operations
+- **Services**: Contain business logic and data access
+  - `LegacyApiService`: Connects to the Azure backend to retrieve patient data
+- **Mappers**: Transform legacy data models to FHIR resources
+  - `PatientFhirMapper`: Converts demographic data to FHIR Patient resources
+- **Validators**: Ensure FHIR compliance
+  - `FhirResourceValidator`: Validates resources against FHIR specifications
 
-Our solution implements a clean, multi-tiered architecture to ensure proper separation of concerns and maintainable code:
+### 2. Phoenix-AzureAPI
+
+An ASP.NET Core API that serves as the backend for the Phoenix-Azure application, connecting to the remote Azure API.
+
+**Key Features:**
+- Acts as a proxy to the Azure API at `apiserviceswin20250318.azurewebsites.net/api`
+- Implements multiple strategies to retrieve patient data
+- Handles authentication and authorization
+- Manages data access and transformation
+
+**Implementation Details:**
+- Uses a multi-endpoint approach to retrieve patient data:
+  1. First tries the PatientIndex endpoint to get patient IDs
+  2. Fetches demographics for each patient ID
+  3. Falls back to addendum records if needed
+
+### 3. Phoenix-AzureClient
+
+A web-based client application that provides a user interface for interacting with the Phoenix-FHIR-API.
+
+**Key Features:**
+- Displays patient information in a user-friendly interface
+- Provides FHIR resource exploration capabilities
+- Offers validation functionality for FHIR resources
+- Supports searching and filtering of patient data
+
+**Implementation Details:**
+- Built with HTML, CSS, and JavaScript
+- Communicates with the Phoenix-FHIR-API to retrieve and display data
+- Includes a FHIR Explorer interface for viewing and validating FHIR resources
+
+### 4. DataAccess
+
+A data access layer that provides repository implementations for connecting to various data sources.
+
+**Key Features:**
+- Implements the repository pattern for data access abstraction
+- Supports both SQL and FHIR data sources
+- Provides a consistent interface for data retrieval and manipulation
+
+## Architecture and Data Flow
+
+The Phoenix Healthcare Interoperability Platform implements a multi-tiered architecture:
 
 ### 1. Data Access Tier
-- **Legacy API Integration**: Connects to existing healthcare endpoints defined in swagger.json
+- **Legacy API Integration**: Connects to existing healthcare endpoints at `apiserviceswin20250318.azurewebsites.net/api`
 - **Repository Pattern**: Abstracts data access through repository interfaces
-- **No Direct SQL**: All data access occurs through the defined API endpoints
 - **Data Retrieval Services**: Specialized services for fetching specific types of healthcare data
 
 ### 2. Transformation Tier
 - **Mappers**: Dedicated components that transform legacy models to FHIR resources
-- **Bidirectional Mapping**: Support for both read and write operations
 - **Field-Level Transformations**: Explicit mapping between source and target fields
 - **Extension Handling**: Proper management of FHIR extensions for non-standard data
 
@@ -39,133 +94,69 @@ Our solution implements a clean, multi-tiered architecture to ensure proper sepa
 - **RESTful Endpoints**: FHIR-compliant API endpoints
 - **Resource Controllers**: Dedicated controllers for each FHIR resource type
 - **Operation Support**: Implementation of standard FHIR operations
-- **Security**: Authentication and authorization mechanisms
 
-### 5. Presentation Tier (Consumer)
+### 5. Presentation Tier
 - **UI Components**: Modern web interface consuming FHIR resources
-- **No Business Logic**: Presentation layer focuses solely on display and user interaction
 - **FHIR Client**: Communicates with the API tier using standard FHIR interactions
 
-### Data Flow
-1. **Request Initiation**: User interaction triggers a request from the Presentation Tier
-2. **API Handling**: The API Tier receives and processes the request
-3. **Data Retrieval**: The Data Access Tier fetches required data from legacy endpoints
-4. **Transformation**: The Transformation Tier converts legacy data to FHIR format
-5. **Validation**: The Validation Tier ensures FHIR compliance
-6. **Response**: The API Tier returns validated FHIR resources to the Presentation Tier
-7. **Rendering**: The Presentation Tier displays the data to the user
+### Data Flow Process
 
-This clean separation ensures:
-- **Maintainability**: Each tier can be modified independently
-- **Testability**: Components can be tested in isolation
-- **Scalability**: Tiers can be scaled independently based on load
-- **Evolvability**: The system can adapt to changes in either the legacy system or FHIR standards
+1. **Request Initiation**: User interaction with the Phoenix-AzureClient triggers a request
+2. **API Handling**: The Phoenix-FHIR-API receives the request
+3. **Data Retrieval**: The API retrieves data from the Azure backend using the LegacyApiService
+4. **Transformation**: The retrieved data is transformed into FHIR resources using appropriate mappers
+5. **Validation**: The FHIR resources are validated against FHIR standards
+6. **Response**: The validated FHIR resources are returned to the client
+7. **Presentation**: The client displays the FHIR resources to the user
 
-## Technical Approach
+## Implementation Approach
 
-### 1. Incremental Resource Implementation
+The Phoenix Healthcare Interoperability Platform follows these key principles:
 
-We're following a methodical, incremental approach to building out the FHIR resources:
+1. **Standards Compliance**: All FHIR resources are fully compliant with FHIR R4 specifications
+2. **Real Data Sources**: The platform uses only real data sources, avoiding mock data
+3. **Incremental Implementation**: Resources are implemented one type at a time, starting with Patient
+4. **Comprehensive Mapping**: Each field in the legacy data is explicitly mapped to its FHIR equivalent
+5. **Thorough Validation**: All resources are validated against FHIR standards before being returned
 
-- **One Resource at a Time**: Starting with Patient and expanding to other resources in a prioritized order
-- **Thorough Testing**: Each resource is fully tested before moving to the next
-- **Field-Level Mapping**: Explicit mapping between legacy fields and FHIR attributes
+## Current Implementation Status
 
-### 2. No Mock Data Policy
+The platform currently supports the following FHIR resources:
 
-- All data is sourced directly from the legacy API endpoints defined in swagger.json
-- No synthetic or mock data is used in the transformation process
-- Every FHIR resource represents actual data from the legacy system
+1. **Patient**: Complete implementation with mapping from demographic data
+   - Includes proper identifiers, names, gender, birth dates, addresses, and telecom information
+   - Complies with US Core profile requirements
 
-### 3. Dual Validation Strategy
+Future development will focus on implementing additional FHIR resources, including:
+- Practitioner
+- Organization
+- Location
+- Observation
+- Condition
+- Procedure
+- MedicationRequest
 
-- **Primary Validation**: Using Firely SDK's built-in validation capabilities
-- **Secondary Verification**: Additional custom validation to ensure compliance with specific implementation guides
-- **US Core Compliance**: Where applicable, resources are validated against US Core profiles
+## Getting Started
 
-### 4. Swagger-to-FHIR Mapping Framework
+### Prerequisites
+- .NET 6.0 or later
+- Node.js (for running the client)
 
-The core of this project is a robust mapping framework that:
+### Running the Application
+1. Start the Phoenix-FHIR-API:
+   ```
+   cd Phoenix-FHIR-API
+   dotnet run
+   ```
 
-1. Consumes the legacy API endpoints defined in swagger.json
-2. Applies field-level transformations to convert legacy data models to FHIR resources
-3. Validates the resulting FHIR resources against the standard
-4. Exposes the transformed resources through a RESTful API
+2. Start the Phoenix-AzureClient:
+   ```
+   cd Phoenix-AzureClient
+   python -m http.server 8090
+   ```
 
-## Clean Data Flow Principles
+3. Access the client at `http://localhost:8090/fhir-demo.html`
 
-Our architecture adheres to the following principles to ensure clean data flow:
+## Conclusion
 
-1. **Unidirectional Data Flow**: Data flows in a predictable direction through the tiers
-2. **Immutable Data Transfer**: Data objects are not modified once created, new objects are created for transformations
-3. **Clear Boundaries**: Well-defined interfaces between tiers
-4. **Dependency Inversion**: Higher tiers do not depend on lower tier implementations
-5. **Explicit Transformations**: All data mapping is explicit and traceable
-6. **Error Propagation**: Errors are caught at the appropriate tier and propagated with context
-7. **Stateless Operations**: API operations are stateless for scalability
-8. **Idempotent Requests**: API calls with the same parameters always produce the same results
-
-## Implementation Plan
-
-### Phase 1: Foundation & Patient Resource
-- ✅ Project structure and architecture
-- ✅ Core validation framework
-- ✅ Patient resource mapping and endpoints
-- ✅ Initial documentation
-
-### Phase 2: Clinical Resources
-- Practitioner resource mapping
-- Organization resource mapping
-- Location resource mapping
-- AllergyIntolerance resource mapping
-- Condition resource mapping
-- MedicationStatement resource mapping
-
-### Phase 3: Documentation & Additional Resources
-- DocumentReference resource mapping
-- Observation resource mapping
-- Appointment resource mapping
-- PractitionerRole resource mapping
-
-### Phase 4: Composite Resources & Operations
-- Bundle resource support
-- FHIR operations implementation ($everything, etc.)
-- Search parameter support
-
-### Phase 5: Optimization & Security
-- Performance optimization
-- Security implementation
-- Comprehensive testing
-
-## Presentation Layer Integration
-
-The transformed FHIR resources will be consumed by a presentation-only layer that:
-
-1. Makes API calls to the transformation layer
-2. Receives standardized FHIR resources
-3. Renders the data in a user-friendly interface
-4. Supports CRUD operations through the transformation layer
-
-This separation of concerns allows the presentation layer to focus solely on user experience without needing to understand the complexities of the legacy data structures or the FHIR transformation process.
-
-## Benefits
-
-1. **Standardization**: All healthcare data is accessible through standardized FHIR interfaces
-2. **Interoperability**: Easy integration with other FHIR-compatible systems
-3. **Modernization**: Legacy systems can be accessed through modern APIs without migration
-4. **Future-Proofing**: New presentation layers can be developed independently of the data layer
-5. **Incremental Adoption**: FHIR resources can be implemented and adopted one at a time
-6. **Clean Architecture**: Proper separation of concerns for maintainability and scalability
-
-## Technical Stack
-
-- **.NET 6**: Core application framework
-- **Firely SDK (Hl7.Fhir.R4)**: FHIR implementation and validation
-- **Swagger/OpenAPI**: Definition of legacy API endpoints
-- **RESTful API**: Interface for the presentation layer
-- **Dependency Injection**: For loose coupling between components
-- **Unit Testing**: Comprehensive test coverage for all tiers
-
----
-
-*This document was created to explain the AI-assisted development approach for the Phoenix FHIR Transformation Layer project.*
+The Phoenix Healthcare Interoperability Platform provides a robust solution for transforming legacy healthcare data into FHIR-compliant resources. By following FHIR standards and best practices, the platform enables seamless integration with modern healthcare systems while maintaining compatibility with existing data sources.
