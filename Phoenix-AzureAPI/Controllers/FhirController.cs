@@ -45,7 +45,7 @@ namespace Phoenix_AzureAPI.Controllers
         /// <returns>A FHIR Patient resource or a Bundle of all patients if no ID is provided</returns>
         [HttpGet("Patient/{id?}")]
         [Produces("application/fhir+json")]
-        public async Task<IActionResult> GetPatient(int? id = null)
+        public async System.Threading.Tasks.Task<IActionResult> GetPatient(int? id = null)
         {
             try
             {
@@ -99,7 +99,7 @@ namespace Phoenix_AzureAPI.Controllers
         [ProducesResponseType(typeof(Bundle), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         [Produces("application/fhir+json")] // This specifies that we return FHIR-formatted JSON
-        public async Task<IActionResult> GetAllPatients()
+        public async System.Threading.Tasks.Task<IActionResult> GetAllPatients()
         {
             try
             {
@@ -415,7 +415,7 @@ namespace Phoenix_AzureAPI.Controllers
         /// <returns>A list of patient IDs</returns>
         [HttpGet("PatientIds")]
         [Produces("application/json")]
-        public async Task<IActionResult> GetAllPatientIds()
+        public async System.Threading.Tasks.Task<IActionResult> GetAllPatientIds()
         {
             try
             {
@@ -436,7 +436,7 @@ namespace Phoenix_AzureAPI.Controllers
         /// <returns>A FHIR Bundle containing the Patient resource and all related resources</returns>
         [HttpGet("Bundle/Patient/{id}")]
         [Produces("application/fhir+json")]
-        public async Task<IActionResult> GetPatientBundle(int id)
+        public async System.Threading.Tasks.Task<IActionResult> GetPatientBundle(int id)
         {
             try
             {
@@ -525,7 +525,7 @@ namespace Phoenix_AzureAPI.Controllers
         /// <summary>
         /// Get all medical records for a patient
         /// </summary>
-        private async Task<List<MedicalRecordData>> GetPatientMedicalRecords(int patientId)
+        private async System.Threading.Tasks.Task<List<MedicalRecordData>> GetPatientMedicalRecords(int patientId)
         {
             try
             {
@@ -553,7 +553,7 @@ namespace Phoenix_AzureAPI.Controllers
         /// <summary>
         /// Add allergies to the FHIR Bundle as AllergyIntolerance resources
         /// </summary>
-        private async Task AddAllergiesToBundle(Bundle bundle, object allergiesData, int patientId)
+        private async System.Threading.Tasks.Task AddAllergiesToBundle(Bundle bundle, object allergiesData, int patientId)
         {
             try
             {
@@ -638,7 +638,7 @@ namespace Phoenix_AzureAPI.Controllers
         /// <summary>
         /// Add medications to the FHIR Bundle as MedicationStatement resources
         /// </summary>
-        private async Task AddMedicationsToBundle(Bundle bundle, object medicationsData, int patientId)
+        private async System.Threading.Tasks.Task AddMedicationsToBundle(Bundle bundle, object medicationsData, int patientId)
         {
             try
             {
@@ -716,7 +716,7 @@ namespace Phoenix_AzureAPI.Controllers
         /// <summary>
         /// Add problems to the FHIR Bundle as Condition resources
         /// </summary>
-        private async Task AddProblemsToBundle(Bundle bundle, object problemsData, int patientId)
+        private async System.Threading.Tasks.Task AddProblemsToBundle(Bundle bundle, object problemsData, int patientId)
         {
             try
             {
@@ -801,7 +801,7 @@ namespace Phoenix_AzureAPI.Controllers
         /// <summary>
         /// Add notes to the FHIR Bundle as DocumentReference resources
         /// </summary>
-        private async Task AddNotesToBundle(Bundle bundle, object notesData, int patientId)
+        private async System.Threading.Tasks.Task AddNotesToBundle(Bundle bundle, object notesData, int patientId)
         {
             try
             {
@@ -915,7 +915,7 @@ namespace Phoenix_AzureAPI.Controllers
         }
 
         // Helper methods to get patient data
-        private async Task<DomainPatient> GetPatientFromDatabase(int? id)
+        private async System.Threading.Tasks.Task<DomainPatient> GetPatientFromDatabase(int? id)
         {
             if (!id.HasValue)
             {
@@ -934,7 +934,7 @@ namespace Phoenix_AzureAPI.Controllers
             }
         }
 
-        private async Task<List<DomainPatient>> GetAllPatientsFromDatabase()
+        private async System.Threading.Tasks.Task<List<DomainPatient>> GetAllPatientsFromDatabase()
         {
             try
             {

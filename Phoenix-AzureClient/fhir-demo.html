@@ -284,7 +284,7 @@
     <script>
         // Configuration
         const API_BASE_URL = 'http://localhost:5300/api';
-        const FHIR_API_BASE_URL = 'http://localhost:5300/api/fhir';
+        const FHIR_API_BASE_URL = 'http://localhost:5300/api';
         const VALIDATOR_API_URL = 'https://inferno.healthit.gov/validatorapi';
         
         // Current resource being displayed
@@ -590,10 +590,20 @@
                     let listHtml = '';
                     data.entry.forEach(entry => {
                         const patient = entry.resource;
-                        const patientId = patient.id;
-                        const patientName = patient.name && patient.name[0] ? 
-                            ((patient.name[0].family || '') + ', ' + 
-                            (patient.name[0].given ? patient.name[0].given.join(' ') : '')).trim() : 'Unknown Name';
+                        const patientId = patient.id || 'Unknown';
+                        
+                        let patientName = 'Unknown Name';
+                        if (patient.name && patient.name.length > 0) {
+                            const familyName = patient.name[0].family || '';
+                            let givenNames = '';
+                            if (patient.name[0].given && patient.name[0].given.length > 0) {
+                                givenNames = patient.name[0].given.join(' ');
+                            }
+                            
+                            if (familyName || givenNames) {
+                                patientName = (givenNames + ' ' + familyName).trim();
+                            }
+                        }
                         
                         listHtml += `
                             <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
@@ -651,6 +661,26 @@
                 
                 // Display the patient data
                 document.getElementById('patient-details').innerHTML = syntaxHighlight(JSON.stringify(patientData, null, 2));
+                
+                // Update patient info in the header
+                let patientName = 'Unknown Name';
+                if (patientData.name && patientData.name.length > 0) {
+                    const familyName = patientData.name[0].family || '';
+                    let givenNames = '';
+                    if (patientData.name[0].given && patientData.name[0].given.length > 0) {
+                        givenNames = patientData.name[0].given.join(' ');
+                    }
+                    
+                    if (familyName || givenNames) {
+                        patientName = (givenNames + ' ' + familyName).trim();
+                    }
+                }
+                
+                const patientId = patientData.id || 'Unknown';
+                document.getElementById('resource-title').innerText = `Patient: ${patientName} (ID: ${patientId})`;
+                
+                // Show the patient details section
+                document.getElementById('resource-details-section').style.display = 'block';
             } catch (error) {
                 console.error('Error fetching patient:', error);
                 document.getElementById('patient-details').innerHTML = `

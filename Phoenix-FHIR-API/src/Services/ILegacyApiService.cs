@@ -10,6 +10,7 @@ namespace Phoenix_FHIR_API.Services
     {
         // Patient-related methods
         Task<DemographicsDomain?> GetPatientByIdAsync(int patientId);
+        Task<List<DemographicsDomain>> GetAllPatientsAsync();
         Task<List<ListAllergiesDomain>> GetPatientAllergiesAsync(int patientId);
         Task<List<ListMedsDomain>> GetPatientMedicationsAsync(int patientId);
         Task<List<ListProblemDomain>> GetPatientProblemsAsync(int patientId);

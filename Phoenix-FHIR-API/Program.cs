@@ -57,4 +57,4 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 app.MapControllers();
 
-app.Run();
+app.Run("http://localhost:5300");

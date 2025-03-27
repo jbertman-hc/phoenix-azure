@@ -281,5 +281,276 @@ namespace Phoenix_FHIR_API.Services
             
             return new List<SchedulingDomain>();
         }
+
+        /// <summary>
+        /// Get all patients
+        /// </summary>
+        public async Task<List<DemographicsDomain>> GetAllPatientsAsync()
+        {
+            var patients = new Dictionary<int, DemographicsDomain>();
+            
+            // Strategy 1: Try to get patients from PatientIndex endpoint
+            await GetPatientsFromPatientIndex(patients);
+            
+            // Strategy 2: If no patients found, try specific patient IDs
+            if (patients.Count == 0)
+            {
+                await GetPatientsFromSpecificIds(patients);
+            }
+            
+            // Strategy 3: If still no patients found, try addendum records
+            if (patients.Count == 0)
+            {
+                await GetPatientsFromAddendum(patients);
+            }
+            
+            return patients.Values.ToList();
+        }
+        
+        /// <summary>
+        /// Get patients from the PatientIndex endpoint
+        /// </summary>
+        private async Task GetPatientsFromPatientIndex(Dictionary<int, DemographicsDomain> patients)
+        {
+            try
+            {
+                var url = $"{_baseApiUrl}PatientIndex";
+                Console.WriteLine($"Requesting URL: {url}");
+                
+                var response = await _httpClient.GetAsync(url);
+                Console.WriteLine($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"Response content: {content}");
+                    
+                    if (!string.IsNullOrWhiteSpace(content) && content != "[]" && content != "{}")
+                    {
+                        try
+                        {
+                            using (JsonDocument doc = JsonDocument.Parse(content))
+                            {
+                                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                                {
+                                    foreach (var patientElement in doc.RootElement.EnumerateArray())
+                                    {
+                                        try
+                                        {
+                                            // Extract patient ID from the index
+                                            if (patientElement.TryGetProperty("patID", out JsonElement patIdElement) &&
+                                                patIdElement.ValueKind == JsonValueKind.Number)
+                                            {
+                                                int patientId = patIdElement.GetInt32();
+                                                
+                                                // Skip if we already have this patient
+                                                if (patients.ContainsKey(patientId))
+                                                {
+                                                    continue;
+                                                }
+                                                
+                                                // Fetch patient demographics
+                                                var patient = await GetPatientByIdAsync(patientId);
+                                                if (patient != null)
+                                                {
+                                                    patients[patientId] = patient;
+                                                    Console.WriteLine($"Added patient from PatientIndex: ID={patientId}");
+                                                }
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Console.WriteLine($"Error processing patient index element: {ex.Message}");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            Console.WriteLine($"Error parsing patient index JSON: {ex.Message}");
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"Failed to retrieve patient index. Status code: {response.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting patient index: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Get patients from specific IDs
+        /// </summary>
+        private async Task GetPatientsFromSpecificIds(Dictionary<int, DemographicsDomain> patients)
+        {
+            // Try a range of patient IDs
+            int[] patientIds = new int[] { 
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
+                1001, 1002, 1003, 1004, 1005, 
+                2001, 2002, 2003, 2004, 2005,
+                3001, 3002, 3003, 3004, 3005,
+                4001, 4002, 4003, 4004, 4005,
+                5001, 5002, 5003, 5004, 5005
+            };
+            
+            foreach (var patientId in patientIds)
+            {
+                try
+                {
+                    // Skip if we already have this patient
+                    if (patients.ContainsKey(patientId))
+                    {
+                        continue;
+                    }
+                    
+                    var patient = await GetPatientByIdAsync(patientId);
+                    if (patient != null)
+                    {
+                        patients[patientId] = patient;
+                        Console.WriteLine($"Added patient from specific ID: ID={patientId}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error getting patient {patientId}: {ex.Message}");
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Get patients from addendum records
+        /// </summary>
+        private async Task GetPatientsFromAddendum(Dictionary<int, DemographicsDomain> patients)
+        {
+            // Fetch patient information from addendum records
+            // We'll check the first 20 addendum records to find unique patients
+            for (int i = 1; i <= 20; i++)
+            {
+                try
+                {
+                    var url = $"{_baseApiUrl}addendum/{i}";
+                    Console.WriteLine($"Requesting URL: {url}");
+                    
+                    var response = await _httpClient.GetAsync(url);
+                    Console.WriteLine($"Response status code: {(int)response.StatusCode} {response.StatusCode}");
+                    
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var content = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine($"Response content: {content}");
+                        
+                        if (!string.IsNullOrWhiteSpace(content) && content != "{}")
+                        {
+                            try
+                            {
+                                using (JsonDocument doc = JsonDocument.Parse(content))
+                                {
+                                    if (doc.RootElement.TryGetProperty("patID", out JsonElement patIdElement) &&
+                                        patIdElement.ValueKind == JsonValueKind.Number)
+                                    {
+                                        int patientId = patIdElement.GetInt32();
+                                        
+                                        // Skip if we already have this patient
+                                        if (patients.ContainsKey(patientId))
+                                        {
+                                            Console.WriteLine($"Patient {patientId} already in list, skipping");
+                                            continue;
+                                        }
+                                        
+                                        // Try to get patient demographics
+                                        var patient = await GetPatientByIdAsync(patientId);
+                                        if (patient == null)
+                                        {
+                                            // Create a basic patient record from addendum data
+                                            patient = new DemographicsDomain { patientID = patientId };
+                                            
+                                            // Extract patient name from the patientName field
+                                            if (doc.RootElement.TryGetProperty("patientName", out JsonElement nameElement) &&
+                                                nameElement.ValueKind == JsonValueKind.String)
+                                            {
+                                                string fullNameWithDob = nameElement.GetString() ?? "";
+                                                
+                                                if (!string.IsNullOrWhiteSpace(fullNameWithDob))
+                                                {
+                                                    // Parse patient name (format: "LASTNAME, FIRSTNAME (DOB: MM/DD/YYYY)")
+                                                    ParsePatientNameFromAddendum(fullNameWithDob, patient);
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Only add the patient if we have a valid ID
+                                        if (patient.patientID > 0)
+                                        {
+                                            patients[patientId] = patient;
+                                            Console.WriteLine($"Added patient from addendum {i}: ID={patient.patientID}");
+                                        }
+                                    }
+                                }
+                            }
+                            catch (JsonException ex)
+                            {
+                                Console.WriteLine($"Error parsing addendum {i} JSON: {ex.Message}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Failed to retrieve addendum {i}. Status code: {response.StatusCode}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error getting addendum {i}: {ex.Message}");
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Parse patient name from addendum
+        /// </summary>
+        private void ParsePatientNameFromAddendum(string fullNameWithDob, DemographicsDomain patient)
+        {
+            try
+            {
+                // Format: "LASTNAME, FIRSTNAME (DOB: MM/DD/YYYY)"
+                var nameParts = fullNameWithDob.Split(new[] { ',' }, 2);
+                
+                if (nameParts.Length >= 1)
+                {
+                    patient.lastName = nameParts[0].Trim();
+                    
+                    if (nameParts.Length >= 2)
+                    {
+                        // Extract first name (might include DOB in parentheses)
+                        var firstNameWithDob = nameParts[1].Trim();
+                        
+                        // Extract DOB if present
+                        var dobMatch = System.Text.RegularExpressions.Regex.Match(firstNameWithDob, @"\(DOB:\s*(\d{1,2}/\d{1,2}/\d{4})\)");
+                        if (dobMatch.Success && dobMatch.Groups.Count > 1)
+                        {
+                            var dobString = dobMatch.Groups[1].Value;
+                            if (DateTime.TryParse(dobString, out DateTime dob))
+                            {
+                                patient.birthDate = dob;
+                            }
+                            
+                            // Remove DOB part from first name
+                            firstNameWithDob = firstNameWithDob.Replace(dobMatch.Value, "").Trim();
+                        }
+                        
+                        patient.firstName = firstNameWithDob;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error parsing patient name from addendum: {ex.Message}");
+            }
+        }
     }
 }

@@ -281,5 +281,71 @@ namespace Phoenix_FHIR_API.Controllers
                 return StatusCode(500, $"Error getting Patient Bundle: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// Get all FHIR Patient resources
+        /// </summary>
+        /// <returns>A Bundle containing all FHIR Patient resources</returns>
+        [HttpGet("Patient")]
+        [SwaggerOperation(
+            Summary = "Get all FHIR Patient resources",
+            Description = "Returns a Bundle containing all FHIR Patient resources",
+            OperationId = "GetAllPatients",
+            Tags = new[] { "FHIR" }
+        )]
+        [SwaggerResponse(200, "A Bundle containing all FHIR Patient resources", typeof(Bundle))]
+        [SwaggerResponse(500, "Internal server error")]
+        [Produces("application/fhir+json")]
+        public async Task<IActionResult> GetAllPatients()
+        {
+            try
+            {
+                // Get all patients from the legacy API
+                var patients = await _legacyApiService.GetAllPatientsAsync();
+                
+                // Create a Bundle
+                var bundle = new Bundle
+                {
+                    Type = Bundle.BundleType.Searchset,
+                    Id = Guid.NewGuid().ToString(),
+                    Meta = new Meta
+                    {
+                        LastUpdated = DateTime.UtcNow
+                    },
+                    Timestamp = DateTime.UtcNow,
+                    Total = patients.Count
+                };
+                
+                // Add each patient to the Bundle
+                foreach (var demographics in patients)
+                {
+                    var patient = await _patientMapper.CreatePatientResourceAsync(demographics);
+                    
+                    // Validate the FHIR resource
+                    if (!_validator.Validate(patient, out var validationIssues))
+                    {
+                        _logger.LogWarning("Validation issues for Patient {PatientId}: {Issues}", 
+                            demographics.patientID, string.Join(", ", validationIssues));
+                    }
+                    
+                    bundle.Entry.Add(new Bundle.EntryComponent
+                    {
+                        FullUrl = $"urn:uuid:{Guid.NewGuid()}",
+                        Resource = patient,
+                        Search = new Bundle.SearchComponent
+                        {
+                            Mode = Bundle.SearchEntryMode.Match
+                        }
+                    });
+                }
+                
+                return Ok(bundle);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting all Patients");
+                return StatusCode(500, $"Error getting all Patients: {ex.Message}");
+            }
+        }
     }
 }
